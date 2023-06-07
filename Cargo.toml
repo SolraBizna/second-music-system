@@ -1,0 +1,2 @@
+[workspace]
+members = ["second-music-system", "c-second-music-system"]
