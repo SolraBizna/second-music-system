@@ -1,8 +1,6 @@
 use super::*;
 
-use std::{
-    sync::{Arc, Weak},
-};
+use std::sync::{Arc, Weak};
 
 use tokio::sync::oneshot;
 
@@ -124,12 +122,6 @@ pub struct BufferMan {
 }
 
 impl SoundManImpl for BufferMan {
-    fn new(delegate: Arc<dyn SoundDelegate>) -> BufferMan {
-        BufferMan {
-            delegate,
-            sounds: HashMap::new(),
-        }
-    }
     fn load(&mut self, sound: &str, _start: f32, loading_rt: &Option<Arc<Runtime>>) {
         if let Some(ent) = self.sounds.get_mut(sound) {
             ent.check_loading(&self.delegate, sound);
@@ -204,18 +196,7 @@ impl SoundManImpl for BufferMan {
         }
     }
     fn unload_all(&mut self) {
-        for sound in self.sounds.values_mut() {
-            match sound {
-                CachedSound::LoadingSound { load_count, .. }
-                    => *load_count = 0,
-                CachedSound::LoadedSound { vec, format, .. }
-                    => *sound = CachedSound::UnloadedSound {
-                        format: format.clone(),
-                        vec: vec.downgrade(),
-                    },
-                CachedSound::UnloadedSound { .. } => (),
-            }
-        }
+        self.sounds.clear();
     }
     fn is_ready(&mut self, sound: &str, _start: f32) -> bool {
         if let Some(x) = self.sounds.get_mut(sound) {
@@ -230,19 +211,19 @@ impl SoundManImpl for BufferMan {
         &mut self,
         sound: &str,
         start: f32,
-        _loop_start: f32
+        end: f32
     ) -> Option<FormattedSoundStream> {
         self.sounds.get_mut(sound).and_then(|s| {
             s.check_loading(&self.delegate, sound);
             match s {
                 CachedSound::LoadedSound { format, vec, .. } => {
-                    Some(new_buffer_stream(format, vec.clone(), start))
+                    Some(new_buffer_stream(format, vec.clone(), start, end))
                 },
                 CachedSound::UnloadedSound { format, vec } => {
                     match vec.upgrade() {
                         None => None,
                         Some(vec) => {
-                            Some(new_buffer_stream(format, vec.clone(), start))
+                            Some(new_buffer_stream(format, vec.clone(), start, end))
                         },
                     }
                 },
@@ -252,23 +233,34 @@ impl SoundManImpl for BufferMan {
     }
 }
 
+impl BufferMan {
+    pub fn new(delegate: Arc<dyn SoundDelegate>) -> BufferMan {
+        BufferMan {
+            delegate,
+            sounds: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct BufferStream<T: Sample> {
     vec: Arc<Vec<T>>,
     cursor: usize,
+    end: usize,
     num_channels: usize,
 }
 
-fn new_buffer_stream(format: &Format, vec: FormattedVec, start: f32) -> FormattedSoundStream {
+fn new_buffer_stream(format: &Format, vec: FormattedVec, start: f32, end: f32) -> FormattedSoundStream {
     let cursor = (start.seconds_to_index(format.sample_rate) * format.speaker_layout.get_num_channels() as u64).min(vec.len() as u64) as usize;
+    let end = (end.seconds_to_index(format.sample_rate) * format.speaker_layout.get_num_channels() as u64).min(vec.len() as u64) as usize;
     let sample_rate = format.sample_rate;
     let speaker_layout = format.speaker_layout;
     let reader = match vec {
-        FormattedVec::U8(vec) => FormattedSoundReader::U8(Box::new(BufferStream { vec, cursor, num_channels: speaker_layout.get_num_channels() })),
-        FormattedVec::U16(vec) => FormattedSoundReader::U16(Box::new(BufferStream { vec, cursor, num_channels: speaker_layout.get_num_channels() })),
-        FormattedVec::I8(vec) => FormattedSoundReader::I8(Box::new(BufferStream { vec, cursor, num_channels: speaker_layout.get_num_channels() })),
-        FormattedVec::I16(vec) => FormattedSoundReader::I16(Box::new(BufferStream { vec, cursor, num_channels: speaker_layout.get_num_channels() })),
-        FormattedVec::F32(vec) => FormattedSoundReader::F32(Box::new(BufferStream { vec, cursor, num_channels: speaker_layout.get_num_channels() })),
+        FormattedVec::U8(vec) => FormattedSoundReader::U8(Box::new(BufferStream { vec, cursor, end, num_channels: speaker_layout.get_num_channels() })),
+        FormattedVec::U16(vec) => FormattedSoundReader::U16(Box::new(BufferStream { vec, cursor, end, num_channels: speaker_layout.get_num_channels() })),
+        FormattedVec::I8(vec) => FormattedSoundReader::I8(Box::new(BufferStream { vec, cursor, end, num_channels: speaker_layout.get_num_channels() })),
+        FormattedVec::I16(vec) => FormattedSoundReader::I16(Box::new(BufferStream { vec, cursor, end, num_channels: speaker_layout.get_num_channels() })),
+        FormattedVec::F32(vec) => FormattedSoundReader::F32(Box::new(BufferStream { vec, cursor, end, num_channels: speaker_layout.get_num_channels() })),
     };
     FormattedSoundStream { sample_rate, speaker_layout, reader }
 }
@@ -295,6 +287,7 @@ impl<T: Sample> BufferStream<T> {
         }
         unsafe {
             ret.set_len(amount_read);
+            ret.shrink_to_fit();
             std::mem::transmute(ret)
         }
     }
@@ -312,8 +305,9 @@ fn read_whole_sound(reader: &mut FormattedSoundReader) -> FormattedVec {
 
 impl<T: Sample> SoundReader<T> for BufferStream<T> {
     fn read(&mut self, buf: &mut [MaybeUninit<T>]) -> usize {
+        debug_assert_eq!(buf.len() % self.num_channels, 0);
         let start = self.cursor;
-        let len = (self.vec.len() - self.cursor).min(buf.len());
+        let len = (self.end - self.cursor).min(buf.len());
         let end = start + len;
         // sure hope the compiler figures out that this is a memmove
         buf[..len].iter_mut().zip(&self.vec[start..end]).for_each(|(dst, src)| { dst.write(src.clone()); });
@@ -322,18 +316,18 @@ impl<T: Sample> SoundReader<T> for BufferStream<T> {
         self.cursor += len;
         len
     }
-    fn seek(&mut self, in_pos: u64) -> Option<u64> {
-        if in_pos > usize::MAX as u64 { return None }
-        let pos = (in_pos as usize).checked_mul(self.num_channels)?;
-        if pos > self.vec.len() { return None }
-        self.cursor = pos;
-        Some(in_pos)
+    fn seek(&mut self, _in_pos: u64) -> Option<u64> {
+        panic!("SMS logic error: seeking a BufferStream");
     }
-    fn attempt_clone(&mut self) -> Option<Box<dyn SoundReader<T>>> {
-        Some(Box::new(self.clone()))
+    fn attempt_clone(&self, sample_rate: f32, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
+        FormattedSoundStream {
+            sample_rate,
+            speaker_layout,
+            reader: (Box::new(self.clone()) as Box<dyn SoundReader<T>>).into(),
+        }
     }
     fn estimate_len(&mut self) -> Option<u64> {
-        Some((self.vec.len() / self.num_channels) as u64)
+        panic!("SMS logic error: len estimation on a BufferStream");
     }
     fn skip_coarse(&mut self, count: u64, _buf: &mut [MaybeUninit<T>]) -> u64 {
         let count = count.min(usize::MAX as u64) as usize;

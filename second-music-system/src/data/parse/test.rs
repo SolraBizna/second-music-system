@@ -27,8 +27,6 @@ use super::*;
             name: "test1.mp3".to_string(),
             path: "test1.mp3".to_string(),
             start: 0.0,
-            loop_start: 0.0,
-            loop_end: None,
             end: 32.0,
             stream: false,
         }
@@ -45,14 +43,42 @@ sound test1.mp3
         name: "test1.mp3".to_string(),
         path: "test1.mp3".to_string(),
         start: 0.0,
-        loop_start: 0.0,
-        loop_end: None,
         end: 32.0,
         stream: false,
     });
     assert_eq!(soundtrack.sequences.len(), 0);
     assert_eq!(soundtrack.flows.len(), 0);
 }
+
+#[test]
+#[should_panic]
+fn sound_with_null_implicit_path_parse() {
+    let node = node!(1, ["sound", "test\0.mp3"], [
+        node!(2, ["length", "32"]),
+    ]);
+    let timebases = TimebaseCollection::new();
+    Sound::parse_din_node(&node, &timebases).unwrap();
+}
+#[test]
+#[should_panic]
+fn sound_with_null_path_parse() {
+    let node = node!(1, ["sound", "test"], [
+        node!(2, ["file", "test\0.mp3"]),
+        node!(2, ["length", "32"]),
+    ]);
+    let timebases = TimebaseCollection::new();
+    Sound::parse_din_node(&node, &timebases).unwrap();
+}
+#[test]
+fn sound_with_null_name_explicit_nonnull_path_parse() {
+    let node = node!(1, ["sound", "test\0"], [
+        node!(2, ["file", "test.mp3"]),
+        node!(2, ["length", "32"]),
+    ]);
+    let timebases = TimebaseCollection::new();
+    Sound::parse_din_node(&node, &timebases).unwrap();
+}
+
 #[test] fn new_sequence_parse() {
     let node = node!(1, ["sequence", "test1"], [
         node!(2, ["length", "32"]),
@@ -214,35 +240,6 @@ flow test_flow1
             nodes,
         });
 }
-#[test] fn fade_out_and_release_parse() {
-    let node = node!(1, ["sequence", "test1"], [
-        node!(2, ["length", "32"]),
-        node!(3, ["play", "sound", "test_sound"], [
-            node!(4, ["at", "0"]),
-            node!(5, ["for", "16"]),
-            node!(6, ["fade_out", "4"]),
-            node!(7, ["release"]),
-        ]),
-    ]);
-    let timebases = TimebaseCollection::new();
-    assert_eq!(
-        Sequence::parse_din_node(&node, &timebases).unwrap(),
-        Sequence {
-            name: "test1".to_string(),
-            length: 32.0,
-            elements: vec![
-                (0.0, SequenceElement::PlaySound { 
-                    sound: format!("test_sound"), 
-                    channel: format!("main"), 
-                    fade_in: 0.0, 
-                    length: Some(16.0), 
-                    fade_out: 4.0, 
-                    release: true 
-                })
-            ],
-        }
-    );
-}
 #[test] fn fade_out_parse() {
     let node = node!(1, ["sequence", "test1"], [
         node!(2, ["length", "32"]),
@@ -264,8 +261,7 @@ flow test_flow1
                     channel: format!("main"), 
                     fade_in: 0.0, 
                     length: Some(12.0), 
-                    fade_out: 4.0, 
-                    release: false 
+                    fade_out: 4.0,
                 })
             ],
         }

@@ -1,6 +1,4 @@
-use std::{
-    collections::HashMap,
-};
+use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
 use super::*;
@@ -328,8 +326,7 @@ impl<'a> TimebaseCollection<'a> {
 }
 
 const SOUND_TIME_KEYWORDS: &[&str] = &[
-    "start", "end", "length", "loop_start", "loop_end", "loop_length",
-    "sustain_start", "sustain_end", "sustain_length",
+    "start", "end", "length",
 ];
 
 impl Sound {
@@ -366,6 +363,9 @@ impl Sound {
                 }
                 else if child.items.len() > 2 {
                     return Err(format!("line {}: this element should have a single item (try adding quotes)", child.lineno))
+                }
+                else if let Some(index) = child.items[1].find(['\0']) {
+                    return Err(format!("line {}: this element's path contains a null character at position {}", child.lineno, index))
                 }
                 else {
                     path = Some(child.items[1].clone());
@@ -406,25 +406,6 @@ impl Sound {
             Some(x) => *x + offset,
             None => 0.0,
         };
-        let loop_start = match (data.get("sustain_start"), data.get("loop_start")) {
-            (Some(_), Some(_)) => {
-                return Err(format!("line {}: only one of \"loop_start\" and \"
-                sustain_start\" may be specified, not both", node.lineno))
-            },
-            (Some(x), None) | (None, Some(x)) => *x + offset,
-            (None, None) => 0.0,
-        };
-        let loop_end = match (data.get("sustain_end"), data.get("loop_end"), data.get("sustain_length"), data.get("loop_length")) {
-            (None, None, None, None, ) => None,
-            (Some(x), None, None, None)
-            | (None, Some(x), None, None) => Some(*x + offset),
-            (None, None, Some(x), None)
-            | (None, None, None, Some(x)) => Some(loop_start + *x),
-            _ => {
-                return Err(format!("line {}: only one of \"loop_end\", \"
-                sustain_end\", \"loop_length\", or \"sustain_length\" may be specified", node.lineno))
-            },
-        };
         let end = match (data.get("end"), data.get("length")) {
             (Some(_), Some(_)) => {
                 return Err(format!("line {}: only one of \"end\" and \"
@@ -436,10 +417,19 @@ impl Sound {
                 return Err(format!("line {}: one of \"end\" or \"length\" must be specified", node.lineno))
             },
         };
-        let path = path.unwrap_or_else(|| name.clone());
+        // TODO: fade out requires length
+        let path = match path {
+            Some(path) => path,
+            None => {
+                if let Some(index) = name.find(['\0']) {
+                    return Err(format!("Sound {name:?} has a null character in its name at position {index} and no explicit path. If there is no explicit path, the name is used as the path, and the path is not allowed to have null characters in it. Either remove the null character from the name or add an explicit path."));
+                }
+                name.clone()
+            }
+        };
         let stream = stream.unwrap_or(false);
         Ok(Sound {
-            name, path, start, loop_start, loop_end, end, stream,
+            name, path, start, end, stream,
         })
     }
 }
@@ -517,27 +507,12 @@ impl SequenceElement {
         let mut timebases = timebases.make_child();
         let mut data = HashMap::new();
         let mut channel = None;
-        let mut release = None;
         for child in node.children.iter() {
             if !child.children.is_empty() {
                 return Err(format!("line {}: this element must have no children", child.lineno))
             }
             debug_assert!(child.items.len() > 0);
-            if child.items[0] == "release" {
-                if element_type == "sequence" {
-                    return Err(format!("line {}: \"release\" is not allowed in a sequence element", child.lineno))
-                }
-                if release.is_some() {
-                    return Err(format!("line {}: only one {:?} parameter allowed", child.lineno, child.items[0]))
-                }
-                else if child.items.len() > 1 {
-                    return Err(format!("line {}: \"release\" must not have any items", child.lineno))
-                }
-                else {
-                    release = Some(true);
-                }
-            }
-            else if child.items[0] == "channel" {
+            if child.items[0] == "channel" {
                 if element_type == "sequence" {
                     return Err(format!("line {}: \"channel\" is not allowed in a sequence element", child.lineno))
                 }
@@ -587,7 +562,6 @@ impl SequenceElement {
             Some(x) => *x,
             None => 0.0,
         };
-        let release = release.unwrap_or(false);
         let length = match (data.get("for"), data.get("until")) {
             (Some(_), Some(_)) => {
                 return Err(format!("line {}: only one of \"for\" and \"until\" may be specified, not both", node.lineno))
@@ -603,11 +577,11 @@ impl SequenceElement {
             },
         };
         let (length, fade_out) = match data.get("fade_out") {
-            Some(x) => (if release { length } else { length.map(|a| a - x) }, *x),
+            Some(fade_out) => (length.map(|x| x - fade_out), *fade_out),
             None => (length, 0.0),
         };
         match element_type {
-            "sound" => Ok((start, SequenceElement::PlaySound { sound: name.clone(), channel, fade_in, length, fade_out, release })),
+            "sound" => Ok((start, SequenceElement::PlaySound { sound: name.clone(), channel, fade_in, length, fade_out })),
             "sequence" => Ok((start, SequenceElement::PlaySequence { sequence: name.clone() })),
             _ => unreachable!()
         }
@@ -950,7 +924,7 @@ impl Command {
     }
     /// Performs one level of flattening. You'll still need to run the
     /// steamroller over the commands we insert.
-    fn insert_flattened_if(commands: &mut Vec<Command>, insertion_point: usize, mut branches: Vec<(Vec<PredicateOp>, Vec<Command>)>, mut fallback_branch: Vec<Command>) {
+    fn insert_flattened_if(commands: &mut Vec<Command>, insertion_point: usize, branches: Vec<(Vec<PredicateOp>, Vec<Command>)>, mut fallback_branch: Vec<Command>) {
         let buffer_size = 0
             // Two gotos per branch
             + branches.len() * 2

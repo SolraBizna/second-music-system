@@ -15,6 +15,8 @@ mod soundman;
 use soundman::*;
 mod adapter;
 use adapter::*;
+mod interpreter;
+use interpreter::*;
 
 #[cfg(feature="debug-channels")]
 pub use mixer::MIX_CHANNELS;
@@ -66,7 +68,14 @@ mod privacy_hack {
         fn issue(&mut self, command: EngineCommand);
     }
 }
-use privacy_hack::*;
+use privacy_hack::EngineCommand;
+
+#[cfg(feature="ffi-expose-issuer")]
+pub use privacy_hack::EngineCommandIssuer;
+#[cfg(not(feature="ffi-expose-issuer"))]
+use privacy_hack::EngineCommandIssuer;
+
+impl EngineCommands for dyn EngineCommandIssuer {}
 
 pub trait EngineCommands : EngineCommandIssuer {
     /// Starts a new transaction. Commands that are issued will be batched
@@ -75,8 +84,8 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// - `length`: Your best guess as to the number of commands that will be
     ///   sent during this transaction. This is an optimization hint only.
-    fn begin_transaction(&mut self, length: Option<usize>) -> EngineTransaction<'_, Self> {
-        EngineTransaction {
+    fn begin_transaction(&mut self, length: Option<usize>) -> Transaction<'_, Self> {
+        Transaction {
             parent: self,
             commands: match length {
                 None => Vec::new(),
@@ -86,8 +95,12 @@ pub trait EngineCommands : EngineCommandIssuer {
     }
     /// Replace the active soundtrack with the given one. Currently-active
     /// nodes, sequences, and sounds will do their best to play to their
-    /// conclusion. (If you're replacing one soundtrack with a different one,
-    /// you probably want to fade or stop all flows first.)
+    /// conclusion.
+    ///
+    /// If you're replacing one soundtrack with an entirely different one, you
+    /// probably want to fade or stop all flows first. If you're replacing it
+    /// with a variation of the current soundtrack, such as one that contains
+    /// additional flows, this replacement is seamless.
     fn replace_soundtrack(&mut self, new_soundtrack: Soundtrack) {
         self.issue(EngineCommand::ReplaceSoundtrack { new_soundtrack });
     }
@@ -114,6 +127,15 @@ pub trait EngineCommands : EngineCommandIssuer {
     fn unprecache(&mut self, flow_name: String) {
         self.issue(EngineCommand::Unprecache { flow_name });
     }
+    /// Undoes all previous requests for precaching of flows. Flows that are
+    /// currently in use will still remain in memory.
+    ///
+    /// Commands sent from a given thread are always received in order, so it
+    /// is completely reasonable to call `start_flow` immediately followed
+    /// by `unprecache_all`.
+    fn unprecache_all(&mut self) {
+        self.issue(EngineCommand::UnprecacheAll {});
+    }
     /// Sets a given FlowControl to the given value.
     fn set_flow_control(&mut self, control_name: String, new_value: StringOrNumber) {
         self.issue(EngineCommand::SetFlowControl { control_name, new_value })
@@ -134,7 +156,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Fades a given MixControl to the given volume (0.0 to 1.0), using the
     /// given fading curve, over the given time period (in seconds).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn fade_mix_control_to(&mut self, control_name: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -144,7 +166,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// start with the given prefix to the given volume (0.0 to 1.0), using the
     /// given fading curve, over the given time period (in seconds).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn fade_prefixed_mix_controls_to(&mut self, control_prefix: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -154,7 +176,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// the given volume (0.0 to 1.0), using the given fading curve, over the
     /// given time period (in seconds).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn fade_all_mix_controls_to(&mut self, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -164,7 +186,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// given volume (0.0 to 1.0), using the given fading curve, over the given
     /// time period (in seconds).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn fade_all_mix_controls_except_main_to(&mut self, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -173,11 +195,11 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Fades a given MixControl to zero volume, using the given fading curve,
     /// over the given time period (in seconds). When the fade is complete, the
     /// MixControl will be removed from existence rather than simply zeroed;
-    /// future commands to "prefixed" and "all" can never resuscitate it.
+    /// future commands to "prefixed" and "all" will not resuscitate it
+    /// (unless it is the target of a future, specific command).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
-    /// correlated signals. Don't give a volume above 1.0 unless you are sure
-    /// it won't cause clipping. Don't give negative volumes.
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
+    /// correlated signals.
     fn fade_mix_control_out(&mut self, control_name: String, fade_length: f32, fade_type: FadeType) {
         self.issue(EngineCommand::FadeMixControlOut { control_name, fade_type, fade_length });
     }
@@ -185,12 +207,12 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// start with the given prefix to zero volume, using the given fading
     /// curve, over the given time period (in seconds). When the fade is
     /// complete, the MixControl will be removed from existence rather than
-    /// simply zeroed; future commands to "prefixed" and "all" can never
-    /// resuscitate it.
+    /// simply zeroed; future commands to "prefixed" and "all" will not
+    /// resuscitate it (unless it is the target of a future, specific
+    /// command).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
-    /// correlated signals. Don't give a volume above 1.0 unless you are sure
-    /// it won't cause clipping. Don't give negative volumes.
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
+    /// correlated signals.
     fn fade_prefixed_mix_controls_out(&mut self, control_prefix: String, fade_length: f32, fade_type: FadeType) {
         self.issue(EngineCommand::FadePrefixedMixControlsOut { control_prefix, fade_type, fade_length });
     }
@@ -198,11 +220,11 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// to zero volume, using the given fading curve, over the given time
     /// period (in seconds). When the fade is complete, the MixControl will be
     /// removed from existence rather than simply zeroed; future commands to
-    /// "prefixed" and "all" can never resuscitate it.
+    /// "prefixed" and "all" will not resuscitate it (unless it is the target
+    /// of a future, specific command).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
-    /// correlated signals. Don't give a volume above 1.0 unless you are sure
-    /// it won't cause clipping. Don't give negative volumes.
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
+    /// correlated signals.
     fn fade_all_mix_controls_out(&mut self, fade_length: f32, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllMixControlsOut { fade_type, fade_length });
     }
@@ -210,11 +232,11 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// to zero volume, using the given fading curve, over the given time
     /// period (in seconds). When the fade is complete, the MixControl will be
     /// removed from existence rather than simply zeroed; future commands to
-    /// "prefixed" and "all" can never resuscitate it.
+    /// "prefixed" and "all" will not resuscitate it (unless it is the target
+    /// of a future, specific command).
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
-    /// correlated signals. Don't give a volume above 1.0 unless you are sure
-    /// it won't cause clipping. Don't give negative volumes.
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
+    /// correlated signals.
     fn fade_all_mix_controls_except_main_out(&mut self, fade_length: f32, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllMixControlsExceptMainOut { fade_type, fade_length });
     }
@@ -262,7 +284,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// target volume, with the given fade curve. If the flow was
     /// already playing, acts just like `fade_flow_to`.
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn start_flow(&mut self, flow_name: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -276,7 +298,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// be faded back up to non-zero volume. If this isn't what you want, use
     /// `fade_flow_out` instead.
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn fade_flow_to(&mut self, flow_name: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -291,7 +313,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// be faded back up to non-zero volume. If this isn't what you want, use
     /// `fade_prefixed_flows_out` instead.
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn fade_prefixed_flows_to(&mut self, flow_prefix: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -306,7 +328,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// be faded back up to non-zero volume. If this isn't what you want, use
     /// `fade_prefixed_flows_out` instead.
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
     fn fade_all_flows_to(&mut self, target_volume: f32, fade_length: f32, fade_type: FadeType) {
@@ -317,9 +339,8 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// is not currently playing, or has already faded out. When the fade is
     /// complete, the flow will be stopped.
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
-    /// correlated signals. Don't give a volume above 1.0 unless you are sure
-    /// it won't cause clipping. Don't give negative volumes.
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
+    /// correlated signals.
     fn fade_flow_out(&mut self, flow_name: String, fade_length: f32, fade_type: FadeType) {
         self.issue(EngineCommand::FadeFlowOut { flow_name, fade_type, fade_length});
     }
@@ -328,9 +349,8 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// given time period (in seconds). Does nothing to flows that haven't
     /// been started, or that have already finished fading out.
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
-    /// correlated signals. Don't give a volume above 1.0 unless you are sure
-    /// it won't cause clipping. Don't give negative volumes.
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
+    /// correlated signals.
     fn fade_prefixed_flows_out(&mut self, flow_prefix: String, fade_length: f32, fade_type: FadeType) {
         self.issue(EngineCommand::FadePrefixedFlowsOut { flow_prefix, fade_type, fade_length });
     }
@@ -339,9 +359,8 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// flows that haven't been started, or that have already finished
     /// fading out.
     /// 
-    /// Use `FadeType::Logarithmic` unless you are doing intermixing of
-    /// correlated signals. Don't give a volume above 1.0 unless you are sure
-    /// it won't cause clipping. Don't give negative volumes.
+    /// Use `FadeType::Exponential` unless you are doing intermixing of
+    /// correlated signals.
     fn fade_all_flows_out(&mut self, fade_length: f32, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllFlowsOut { fade_type, fade_length });
     }
@@ -352,8 +371,8 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// ineligible for `prefixed` or `all` commands, and able to be started
     /// from the beginning), instead of only being removed the next time mixing
     /// takes place.
-    fn kill_flow(&mut self, flow_name: String, fade_length: f32, fade_type: FadeType) {
-        self.issue(EngineCommand::FadeFlowOut { flow_name, fade_type, fade_length});
+    fn kill_flow(&mut self, flow_name: String) {
+        self.issue(EngineCommand::KillFlow { flow_name });
     }
     /// Kills all *currently playing* flows whose names strictly start with
     /// the given prefix instantly.
@@ -363,8 +382,8 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// ineligible for `prefixed` or `all` commands, and able to be started
     /// from the beginning), instead of only being removed the next time mixing
     /// takes place.
-    fn kill_prefixed_flows(&mut self, flow_prefix: String, fade_length: f32, fade_type: FadeType) {
-        self.issue(EngineCommand::FadePrefixedFlowsOut { flow_prefix, fade_type, fade_length });
+    fn kill_prefixed_flows(&mut self, flow_prefix: String) {
+        self.issue(EngineCommand::KillPrefixedFlows { flow_prefix });
     }
     /// Kills all *currently playing* flows instantly.
     /// 
@@ -373,17 +392,32 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// ineligible for `prefixed` or `all` commands, and able to be started
     /// from the beginning), instead of only being removed the next time mixing
     /// takes place.
-    fn kill_all_flows(&mut self, fade_length: f32, fade_type: FadeType) {
-        self.issue(EngineCommand::FadeAllFlowsOut { fade_type, fade_length });
+    fn kill_all_flows(&mut self) {
+        self.issue(EngineCommand::KillAllFlows { });
     }
 }
 
-pub struct EngineTransaction<'a, T: EngineCommandIssuer + ?Sized> {
+/// An in-progress transaction. Create one by calling `begin_transaction` on
+/// any type that can receive commands.
+/// 
+/// You can send commands to a transaction, exactly like you can to an
+/// `Engine`. When you `commit` a transaction, all of the commands will be sent
+/// at once, atomically, with neither a gap nor any interleaving with any other
+/// commands. You can instead `abort` a transaction, in which case none of the
+/// commands will be sent.
+///
+/// It is perfectly legal to call `begin_transaction` on a transaction. You can
+/// go as deep as you like. If you do `B = A.begin_transaction()`, queue a
+/// bunch of commands, and then do `B.commit()`, all of those commands will be
+/// sent to `A` at once. If `A` is a transaction, then you still need to do
+/// `A.commit()` if you want the commands to be carried out, or you can do
+/// `A.abort()` to make it so that none of them happened at all.
+pub struct Transaction<'a, T: EngineCommandIssuer + ?Sized> {
     parent: &'a mut T,
     commands: Vec<EngineCommand>,
 }
 
-impl<'a, T: EngineCommandIssuer + ?Sized> EngineTransaction<'a, T> {
+impl<'a, T: EngineCommandIssuer + ?Sized> Transaction<'a, T> {
     /// Commits an in-progress transaction. All commands will arrive at the
     /// `Engine` at the same time, in the correct order.
     pub fn commit(self) {
@@ -396,37 +430,37 @@ impl<'a, T: EngineCommandIssuer + ?Sized> EngineTransaction<'a, T> {
     pub fn abort(self) {}
 }
 
-impl<'a, T: EngineCommandIssuer + ?Sized> EngineCommandIssuer for EngineTransaction<'a, T> {
+impl<'a, T: EngineCommandIssuer + ?Sized> EngineCommandIssuer for Transaction<'a, T> {
     fn issue(&mut self, command: EngineCommand) {
         self.commands.push(command);
     }
 }
 
-impl<'a, T: EngineCommandIssuer + ?Sized> EngineCommands for EngineTransaction<'a, T> {}
+impl<'a, T: EngineCommandIssuer + ?Sized> EngineCommands for Transaction<'a, T> {}
 
 /// This exists to send commands to an `Engine` that belongs to some other
 /// thread. If you're operating entirely in a single thread, you can also just
 /// call any of these methods on an `Engine` directly.
 #[derive(Clone)]
-pub struct EngineCommander {
+pub struct Commander {
     command_tx: Sender<EngineCommand>,
 }
 
-impl EngineCommander {
-    /// Makes another, independent `EngineCommander` that sends commands to the
+impl Commander {
+    /// Makes another, independent `Commander` that sends commands to the
     /// same underlying `Engine`.
     /// 
     /// Equivalent to `clone()`, but can also be called on an `Engine`.
-    pub fn clone_commander(&self) -> EngineCommander { self.clone() }
+    pub fn clone_commander(&self) -> Commander { self.clone() }
 }
 
-impl EngineCommandIssuer for EngineCommander {
+impl EngineCommandIssuer for Commander {
     fn issue(&mut self, command: EngineCommand) {
         let _ = self.command_tx.send(command);
     }
 }
 
-impl EngineCommands for EngineCommander {}
+impl EngineCommands for Commander {}
 
 /// This is the main moving part of the Second Music System. You create one of
 /// these, give it a delegate to handle music decoding, and "turn the handle"
@@ -502,7 +536,6 @@ struct QueuedSound {
     fade_in: f32,
     length: Option<f32>,
     fade_out: f32,
-    release: bool,
 }
 
 impl PartialEq for QueuedSound {
@@ -601,10 +634,10 @@ impl Engine {
             background_loading, starting_flows: HashSet::new(),
         }
     }
-    /// Makes an independent `EngineCommander` that can send commands to this
+    /// Makes an independent `Commander` that can send commands to this
     /// `Engine` from another thread.
-    pub fn clone_commander(&self) -> EngineCommander {
-        EngineCommander {
+    pub fn clone_commander(&self) -> Commander {
+        Commander {
             command_tx: self.command_tx.clone()
         }
     }
@@ -620,6 +653,13 @@ impl Engine {
     pub fn get_speaker_layout(&self) -> SpeakerLayout { self.speaker_layout }
     /// Returns the sample rate this `Engine` was initialized for.
     pub fn get_sample_rate(&self) -> f32 { self.sample_rate }
+    /// Returns whether this `Engine` was initialized with background loading
+    /// turned on or off.
+    pub fn is_loading_in_background(&self) -> bool { self.background_loading }
+    /// Mix some audio, advance time! `out` must have a number of elements
+    /// divisible by the number of speaker channels. Any existing data in `out`
+    /// is mixed with the active music data. You may or may not want to zero
+    /// `out` before this call.
     pub fn turn_handle(&mut self, mut out: &mut [f32]) {
         assert_eq!(out.len() % self.speaker_layout.get_num_channels(), 0);
         let mut mix_buf = Vec::new();
@@ -652,7 +692,9 @@ impl Engine {
                 else { true } // still waiting
             });
             // Process every active node
+            let mut nodes_to_start: HashSet<StringAndAHalf> = HashSet::with_capacity(16);
             let mut nodes_to_restart: HashSet<StringAndAHalf> = HashSet::with_capacity(16);
+            let flow_controls = &mut self.flow_controls;
             self.active_flow_nodes.retain_mut(|active_node| {
                 if active_node.next_instruction_time > now { return true }
                 let mut n = active_node.next_instruction_index;
@@ -660,6 +702,21 @@ impl Engine {
                     let next_command = &active_node.node.commands[n];
                     n += 1;
                     match next_command {
+                        Command::Done => {
+                            return false;
+                        },
+                        Command::Wait(sleep_time) => {
+                            active_node.next_instruction_time = now + (sleep_time * self.sample_rate).floor() as u64;
+                            break;
+                        },
+                        Command::PlaySound(sound_name) => {
+                            Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, 0.0, None, 0.0);
+                        },
+                        Command::PlaySoundAndWait(sound_name) => {
+                            let sleep_time = Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, 0.0, None, 0.0);
+                            active_node.next_instruction_time = now + sleep_time;
+                            break;
+                        },
                         Command::PlaySequence(seqname) => {
                             Self::execute_sequence(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), seqname, &mut self.sound_delegate, &mut self.queued_sounds);
                         },
@@ -668,23 +725,79 @@ impl Engine {
                             active_node.next_instruction_time = now + sleep_time;
                             break;
                         },
-                        Command::PlaySound(sound_name) => {
-                            Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, 0.0, None, 0.0, true);
+                        Command::StartNode(node_name) => {
+                            nodes_to_start.insert(StringAndAHalf(active_node.flow_name.clone(), Some(node_name.clone())));
                         },
-                        Command::PlaySoundAndWait(sound_name) => {
-                            let sleep_time = Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, 0.0, None, 0.0, false);
-                            active_node.next_instruction_time = now + sleep_time;
-                            break;
+                        Command::RestartNode(node_name) => {
+                            nodes_to_restart.insert(StringAndAHalf(active_node.flow_name.clone(), Some(node_name.clone())));
                         },
                         Command::RestartFlow => {
                             nodes_to_restart.insert(StringAndAHalf(active_node.flow_name.clone(), None));
                         },
-                        x => panic!("Unimplemented command: {:?}", x),
+                        Command::FadeNodeOut(node_name, fade_length) => {
+                            match self.node_volumes.get_mut(&StringAndAHalf(active_node.flow_name.clone(), Some(node_name.clone()))) {
+                                Some(fader) => {
+                                    let old_volume = fader.evaluate();
+                                    *fader = Fader::start(FadeType::Linear, old_volume, 0.0, fade_length * self.sample_rate);
+                                },
+                                None => self.sound_delegate.warning(&format!("missing node: {:?}::{:?}", active_node.flow_name, node_name))
+                            }
+                        },
+                        Command::Set(control_name, ops) => {
+                            flow_controls.insert(control_name.clone(), evaluate(flow_controls, ops));
+                        },
+                        Command::Goto(ops, cond, index) => {
+                            if evaluate(flow_controls, ops).is_truthy() == *cond { 
+                                n = *index;
+                            }
+                        },
+                        Command::If { .. } | Command::Placeholder => {
+                            unreachable!("`If` and `Placeholder` commands should not survive long enough to be evaluated.");
+                        }
                     }
                 }
                 active_node.next_instruction_index = n;
                 active_node.next_instruction_index < active_node.node.commands.len()
             });
+            for StringAndAHalf(flow_name, node_name) in nodes_to_start.into_iter() {
+                let node_name = node_name.expect("SMS internal bug: a node with no name was put into nodes_to_start, which should not be possible");
+                // Unwrapping this then wrapping it back in a Some feels wrong, 
+                // but it avoids iteration if node_name is `None`. Of course, 
+                // since it panics, does it really matter if we do a few 
+                // iterations before crashing? I don't know, but you know: 
+                // premature optimization and all that. Probably need to 
+                // re-evaluate this later. -n
+                match self.active_flow_nodes.iter_mut().find(|x| x.flow_name == flow_name && x.node.name == Some(node_name.clone())) {
+                    Some(_active_flow_node) => {
+                        // Node is already playing. Do nothing.
+                        self.sound_delegate.warning(&format!("attempt to start node {:?}, which was already playing", node_name));
+                    },
+                    None => {
+                        // Node is not already playing. Start it.
+                        let flow = match self.live_soundtrack.flows.get(&flow_name) {
+                            None => {
+                                // No such flow. (This should only happen
+                                // when soundtrack shenanigans are happening.)
+                                self.sound_delegate.warning(&format!("missing flow {:?} for node \"{:?}\"", flow_name, node_name));
+                                continue;
+                            },
+                            Some(flow) => flow,
+                        };
+                        let node = match flow.nodes.get(&node_name) {
+                            None => {
+                                self.sound_delegate.warning(&format!("can't start missing node: {:?}::{:?}", flow_name, node_name));
+                                continue;
+                            },
+                            Some(node) => node.clone(),
+                        };
+                        self.active_flow_nodes.push(ActiveNode {
+                            flow_name, node,
+                            next_instruction_time: now,
+                            next_instruction_index: 0,
+                        });
+                    },
+                }
+            }
             for StringAndAHalf(flow_name, node_name) in nodes_to_restart.into_iter() {
                 match self.active_flow_nodes.iter_mut().find(|x| x.flow_name == flow_name && x.node.name == node_name) {
                     Some(afn) => {
@@ -729,7 +842,7 @@ impl Engine {
             // Consume queued sounds whose times have come
             while self.queued_sounds.peek().map(|x| x.when <= now).unwrap_or(false) {
                 let queued_sound = self.queued_sounds.pop().unwrap();
-                if let Some(adapter) = adaptify(&self.sound_delegate, &mut self.soundman, &*queued_sound.sound, queued_sound.fade_in, queued_sound.length, queued_sound.fade_out, queued_sound.release, self.sample_rate, self.speaker_layout) {
+                if let Some(adapter) = adaptify(&self.sound_delegate, &mut self.soundman, &*queued_sound.sound, queued_sound.fade_in, queued_sound.length, queued_sound.fade_out, self.sample_rate, self.speaker_layout) {
                     self.mixer.play(adapter, queued_sound.who);
                 }
             }
@@ -765,16 +878,6 @@ impl Engine {
         #[cfg(feature="debug-flows")]
         {
             if let Some(mut target) = ACTIVE_FLOWS.try_lock() {
-                let mut volume_getter = 
-                VolumeGetWrapper {
-                    mix_controls: &mut self.mix_controls,
-                    flow_volumes: &mut self.flow_volumes,    
-                    node_volumes: &mut self.node_volumes,
-                    flows_fading_out: &self.flows_fading_out,
-                    starting_flows: &self.starting_flows,
-                    seen_flows: &mut seen_flows,
-                    seen_nodes: &mut seen_nodes,
-                };
                 let report = self.active_flow_nodes.iter().map(|x| {
                     let blah = format!("{:?}::{:?} next=[{}]@{}", x.flow_name, x.node.name, x.next_instruction_index, x.next_instruction_time);
                     blah
@@ -916,12 +1019,12 @@ impl Engine {
                     match what {
                         SequenceElement::PlaySequence { sequence } => {
                             assert_ne!(sequence, seqname);
-                            todo!("PlaySequence")
+                            Engine::execute_sequence(soundtrack, sample_rate, when, flow_name, node_name, seqname, sound_delegate, queued_sounds);
                         },
                         SequenceElement::PlaySound {
-                            sound, channel, fade_in, length, fade_out, release
+                            sound, channel, fade_in, length, fade_out,
                         } => {
-                            Engine::execute_sound(soundtrack, sample_rate, when, flow_name, node_name, &sound, sound_delegate, queued_sounds, channel, *fade_in, *length, *fade_out, *release);
+                            Engine::execute_sound(soundtrack, sample_rate, when, flow_name, node_name, &sound, sound_delegate, queued_sounds, channel, *fade_in, *length, *fade_out);
                         }
                     }
                 }
@@ -944,7 +1047,6 @@ impl Engine {
         fade_in: f32,
         length: Option<f32>,
         fade_out: f32,
-        release: bool,
     ) -> u64 {
         let sound = match soundtrack.sounds.get(sound_name) {
             Some(x) => x.clone(),
@@ -967,7 +1069,6 @@ impl Engine {
             fade_in,
             length,
             fade_out,
-            release,
         });
         ret
     }
@@ -1048,7 +1149,7 @@ impl EngineCommandIssuer for Engine {
                 match self.flow_loads.get_mut(&flow_name) {
                     Some(load_status) => {
                         if load_status.precaching {
-                            todo!("warning of double precache");
+                            self.sound_delegate.warning(&format!("attempt to precache flow {:?} more than once", flow_name));
                         }
                         else {
                             load_status.precaching = true;
@@ -1056,20 +1157,20 @@ impl EngineCommandIssuer for Engine {
                         }
                     },
                     None => {
-                        todo!("warning of nil precache")
+                        self.sound_delegate.warning(&format!("attempt to precache flow {:?}, which does not exist", flow_name));
                     },
                 }
             },
             Unprecache { flow_name } => {
                 match self.flow_loads.get_mut(&flow_name) {
-                    None => todo!("warning of nil unprecache"),
+                    None => self.sound_delegate.warning(&format!("attempt to unprecache flow {:?}, which does not exist", flow_name)),
                     Some(load_status) => {
                         if load_status.precaching {
                             load_status.precaching = false;
                             load_status.maybe_unload(&self.live_soundtrack, &mut self.soundman);
                         }
                         else {
-                            todo!("warning of double unprecache");
+                            self.sound_delegate.warning(&format!("attempt to unprecache flow {:?} that wasn't currently precached", flow_name));
                         }
                     },
                 }

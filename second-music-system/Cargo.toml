@@ -22,3 +22,6 @@ default = []
 # turned on tanks performance, even if you don't use the hooks they provide.
 debug-channels = []
 debug-flows = []
+# Exposes the EngineCommandIssuer trait. You should only use/need this if you
+# are creating an FFI binding.
+ffi-expose-issuer = []

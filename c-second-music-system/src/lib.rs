@@ -1,22 +1,58 @@
 use second_music_system::*;
 
 use std::{
-    mem::transmute,
+    ffi::CString,
+    mem::{size_of, transmute},
     ptr::null_mut,
 };
 use libc::{
-    c_char, c_int, size_t,
+    c_char, c_int, c_void, size_t,
     malloc, strlen
 };
 
-fn input(src: *const c_char, src_len: size_t) -> Result<&'static str, String> {
+mod commander;
+mod commands;
+mod engine;
+mod formatted_sound_stream;
+mod sound_delegate;
+mod soundtrack;
+mod utilities;
+
+const SMS_SPEAKER_LAYOUT_MONO: c_int = 0;
+const SMS_SPEAKER_LAYOUT_STEREO: c_int = 1;
+const SMS_SPEAKER_LAYOUT_HEADPHONES: c_int = 2;
+const SMS_SPEAKER_LAYOUT_QUADRAPHONIC: c_int = 3;
+const SMS_SPEAKER_LAYOUT_SURROUND51: c_int = 4;
+const SMS_SPEAKER_LAYOUT_SURROUND71: c_int = 5;
+
+const SMS_SOUND_FORMAT_UNSIGNED_8: c_int = 0;
+const SMS_SOUND_FORMAT_UNSIGNED_16: c_int = 1;
+const SMS_SOUND_FORMAT_SIGNED_8: c_int = 2;
+const SMS_SOUND_FORMAT_SIGNED_16: c_int = 3;
+const SMS_SOUND_FORMAT_FLOAT_32: c_int = 4;
+
+const SMS_FADE_TYPE_LOGARITHMIC: c_int = 1;
+const SMS_FADE_TYPE_LINEAR: c_int = 2;
+const SMS_FADE_TYPE_EXPONENTIAL: c_int = 0;
+
+fn source_input(src: *const c_char, src_len: size_t) -> Result<&'static str, String> {
     let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len as usize) };
     std::str::from_utf8(slice).map_err(|x| {
-        format!("source code contains invalid UTF-8 at byte {}", x.valid_up_to())
+        format!("soundtrack source code contains invalid UTF-8 at byte {}", x.valid_up_to())
     })
 }
 
-fn input_str(src: *const c_char) -> Result<&'static str, String> {
+fn source_input_cstr(src: *const c_char) -> Result<&'static str, String> {
+    let len = unsafe { strlen(src) };
+    source_input(src, len)
+}
+
+fn input(src: *const c_char, src_len: size_t) -> Result<String, String> {
+    let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len as usize) };
+    Ok(String::from_utf8_lossy(slice).to_string())
+}
+
+fn input_cstr(src: *const c_char) -> Result<String, String> {
     let len = unsafe { strlen(src) };
     input(src, len)
 }
@@ -38,76 +74,35 @@ fn output_error(text: &str, error_out: *mut *mut c_char, error_out_len: *mut siz
     }
 }
 
-#[no_mangle]
-pub extern "C" fn SMS_new_soundtrack() -> *mut Soundtrack {
-    Box::into_raw(Box::new(Soundtrack::new()))
+fn speaker_layout_from_int(int: c_int) -> Option<SpeakerLayout> {
+    Some(match int {
+        SMS_SPEAKER_LAYOUT_MONO => SpeakerLayout::Mono,
+        SMS_SPEAKER_LAYOUT_STEREO => SpeakerLayout::Stereo,
+        SMS_SPEAKER_LAYOUT_HEADPHONES => SpeakerLayout::Headphones,
+        SMS_SPEAKER_LAYOUT_QUADRAPHONIC => SpeakerLayout::Quadraphonic,
+        SMS_SPEAKER_LAYOUT_SURROUND51 => SpeakerLayout::Surround51,
+        SMS_SPEAKER_LAYOUT_SURROUND71 => SpeakerLayout::Surround71,
+        _ => return None,
+    })
 }
 
-#[no_mangle]
-pub extern "C" fn SMS_parse_new_soundtrack(
-    src: *const c_char, src_len: size_t,
-    error_out: *mut *mut c_char, error_out_len: *mut size_t
-) -> *mut Soundtrack {
-    match input(src, src_len).and_then(Soundtrack::from_source) {
-        Ok(x) => Box::into_raw(Box::new(x)),
-        Err(x) => {
-            output_error(&x, error_out, error_out_len);
-            null_mut()
-        }
+fn speaker_layout_to_int(layout: SpeakerLayout) -> c_int {
+    match layout {
+        SpeakerLayout::Mono => SMS_SPEAKER_LAYOUT_MONO,
+        SpeakerLayout::Stereo => SMS_SPEAKER_LAYOUT_STEREO,
+        SpeakerLayout::Headphones => SMS_SPEAKER_LAYOUT_HEADPHONES,
+        SpeakerLayout::Quadraphonic => SMS_SPEAKER_LAYOUT_QUADRAPHONIC,
+        SpeakerLayout::Surround51 => SMS_SPEAKER_LAYOUT_SURROUND51,
+        SpeakerLayout::Surround71 => SMS_SPEAKER_LAYOUT_SURROUND71,
+        _ => panic!("SpeakerLayout was expanded, but speaker_layout_to_int was not!"),
     }
 }
 
-#[no_mangle]
-pub extern "C" fn SMS_parse_new_soundtrack_str(
-    src: *const c_char,
-    error_out: *mut *mut c_char, error_out_len: *mut size_t
-) -> *mut Soundtrack {
-    match input_str(src).and_then(Soundtrack::from_source) {
-        Ok(x) => Box::into_raw(Box::new(x)),
-        Err(x) => {
-            output_error(&x, error_out, error_out_len);
-            null_mut()
-        }
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn SMS_parse_soundtrack(
-    soundtrack: *mut Soundtrack,
-    src: *const c_char, src_len: size_t,
-    error_out: *mut *mut c_char, error_out_len: *mut size_t
-) -> c_int {
-    let soundtrack = unsafe { soundtrack.as_mut() }.unwrap();
-    match input(src, src_len).and_then(|x| {
-        soundtrack.clone().parse_source(x)
-    }).map(|x| *soundtrack = x) {
-        Ok(_) => 1,
-        Err(x) => {
-            output_error(&x, error_out, error_out_len);
-            0
-        }
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn SMS_parse_soundtrack_str(
-    soundtrack: *mut Soundtrack,
-    src: *const c_char,
-    error_out: *mut *mut c_char, error_out_len: *mut size_t
-) -> c_int {
-    let soundtrack = unsafe { soundtrack.as_mut() }.unwrap();
-    match input_str(src).and_then(|x| {
-        soundtrack.clone().parse_source(x)
-    }).map(|x| *soundtrack = x) {
-        Ok(_) => 1,
-        Err(x) => {
-            output_error(&x, error_out, error_out_len);
-            0
-        }
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn SMS_free_soundtrack(p: *mut Soundtrack) {
-    drop(unsafe { Box::from_raw(p) })
+fn fade_type_from_int(int: c_int) -> Option<FadeType> {
+    Some(match int {
+        SMS_FADE_TYPE_LOGARITHMIC => FadeType::Logarithmic,
+        SMS_FADE_TYPE_LINEAR => FadeType::Linear,
+        SMS_FADE_TYPE_EXPONENTIAL => FadeType::Exponential,
+        _ => return None,
+    })
 }

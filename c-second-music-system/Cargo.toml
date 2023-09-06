@@ -6,5 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-second-music-system = {version = "0.1.0", path = "../second-music-system"}
+second-music-system = {version = "=0.1.0", path = "../second-music-system", features=["ffi-expose-issuer"]}
 libc = "*"
+paste = "1.0.14"
+function_name = "0.3.0"
+
+[lib]
+crate-type = ["cdylib"]

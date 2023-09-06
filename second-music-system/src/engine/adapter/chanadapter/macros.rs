@@ -63,7 +63,7 @@ macro_rules! make_downmixer {
                     "output skip not a multiple of output channel count");
                 debug_assert_eq!(in_count % ($name::NUM_IN_CHANNELS as u64), 0,
                     "input skip not a multiple of input channel count");
-                let in_skipped = self.inner.skip_coarse(out_count, buf);
+                let in_skipped = self.inner.skip_coarse(in_count, buf);
                 let out_skipped = in_skipped * ($name::NUM_OUT_CHANNELS as u64) / ($name::NUM_IN_CHANNELS as u64);
                 out_skipped
             }
@@ -136,7 +136,7 @@ macro_rules! make_upmixer {
                     "output skip not a multiple of output channel count");
                 debug_assert_eq!(in_count % ($name::NUM_IN_CHANNELS as u64), 0,
                     "input skip not a multiple of input channel count");
-                let in_skipped = self.inner.skip_coarse(out_count, buf);
+                let in_skipped = self.inner.skip_coarse(in_count, buf);
                 let out_skipped = in_skipped * ($name::NUM_OUT_CHANNELS as u64) / ($name::NUM_IN_CHANNELS as u64);
                 out_skipped
             }
@@ -213,7 +213,7 @@ macro_rules! make_upmixer_with_lowpass {
                     "output skip not a multiple of output channel count");
                 debug_assert_eq!(in_count % ($name::NUM_IN_CHANNELS as u64), 0,
                     "input skip not a multiple of input channel count");
-                let in_skipped = self.inner.skip_coarse(out_count, buf);
+                let in_skipped = self.inner.skip_coarse(in_count, buf);
                 let out_skipped = in_skipped * ($name::NUM_OUT_CHANNELS as u64) / ($name::NUM_IN_CHANNELS as u64);
                 out_skipped
             }

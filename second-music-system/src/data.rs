@@ -3,6 +3,7 @@
 use super::*;
 
 use std::{
+    borrow::Cow,
     collections::HashSet,
     str::FromStr,
 };
@@ -20,12 +21,55 @@ pub enum StringOrNumber {
     Number(f32),
 }
 
+impl StringOrNumber {
+    /// When interpreting this as a boolean, it is true if:
+    /// - String: not empty, not equal to "0", not equal to "false"
+    /// - Number: not equal to zero (this means NaN is true)
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            StringOrNumber::String(s) => !s.is_empty() && s != "0" && s != "false",
+            StringOrNumber::Number(n) => *n != 0.0,
+        }
+    }
+    /// When interpreting this is a number:
+    /// - Empty string: zero
+    /// - String that is a valid number: that number
+    /// - String that is an invalid number: NaN
+    /// - Any number: that number
+    pub fn as_number(&self) -> f32 {
+        match self {
+            StringOrNumber::String(s) => {
+                if s.is_empty() { 0.0 }
+                else { s.parse().unwrap_or(std::f32::NAN) }
+            },
+            StringOrNumber::Number(n) => *n,
+        }
+    }
+    /// When interpreting this as a string:
+    /// - Any string: that string
+    /// - Any number: that number, rendered with default formatting, as a string
+    pub fn as_string(&self) -> Cow<str> {
+        match self {
+            StringOrNumber::String(s) => Cow::from(s),
+            StringOrNumber::Number(n) => Cow::from(format!("{}", n)),
+        }
+    }
+}
+
+impl Default for StringOrNumber {
+    fn default() -> StringOrNumber { StringOrNumber::String(String::new()) }
+}
+
 impl From<String> for StringOrNumber {
     fn from(string: String) -> StringOrNumber { StringOrNumber::String(string) }
 }
 
 impl From<f32> for StringOrNumber {
     fn from(f: f32) -> StringOrNumber { StringOrNumber::Number(f) }
+}
+
+impl From<bool> for StringOrNumber {
+    fn from(b: bool) -> StringOrNumber { StringOrNumber::Number(if b { 1.0 } else { 0.0 }) }
 }
 
 impl FromStr for StringOrNumber {
@@ -62,8 +106,6 @@ pub(crate) struct Sound {
     pub(crate) name: String,
     pub(crate) path: String,
     pub(crate) start: f32,
-    pub(crate) loop_start: f32,
-    pub(crate) loop_end: Option<f32>,
     pub(crate) end: f32,
     /// If true, the underlying audio file should be streamed, rather than
     /// cached. (If some sounds request that it be streamed and others request
@@ -85,7 +127,6 @@ pub(crate) enum SequenceElement {
         /// (whereas in the format, this is how long before `end` that the fade
         /// will *start*)
         fade_out: f32,
-        release: bool,
     },
     PlaySequence {
         sequence: String
@@ -305,19 +346,19 @@ pub(crate) enum PredicateOp {
     IDiv,
     /// Pop two elements, push the result of exponentiation.
     Pow,
-    /// Pop one element, return its sine (as radians).
+    /// Pop one element, return its sine (as degrees).
     Sin,
-    /// Pop one element, return its cosine (as radians).
+    /// Pop one element, return its cosine (as degrees).
     Cos,
-    /// Pop one element, return its tangent (as radians).
+    /// Pop one element, return its tangent (as degrees).
     Tan,
-    /// Pop one element, return its arcsine (in radians).
+    /// Pop one element, return its arcsine (in degrees).
     ASin,
-    /// Pop one element, return its arccosine (in radians).
+    /// Pop one element, return its arccosine (in degrees).
     ACos,
-    /// Pop one element, return its arctangent (in radians).
+    /// Pop one element, return its arctangent (in degrees).
     ATan,
-    /// Pop two elements, return atan2 (in radians).
+    /// Pop two elements, return atan2 (in degrees).
     ATan2,
     /// Pop one element, return its natural logarithm.
     Log,
@@ -333,8 +374,7 @@ pub(crate) enum PredicateOp {
     Max,
     /// Pop one element, return its absolute value.
     Abs,
-    /// Pop one element, push -1 if it's negative, 0 if it's zero, 1 if it's
-    /// positive.
+    /// Pop one element, push -1 if it's negative, 1 if it's positive.
     Sign,
     /// Pop one element, push its negation.
     Negate,

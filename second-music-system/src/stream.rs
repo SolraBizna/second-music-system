@@ -67,15 +67,29 @@ pub struct FormattedSoundStream {
     pub reader: FormattedSoundReader,
 }
 
+impl FormattedSoundStream {
+    /// Returns true if this stream can be cheaply cloned, false otherwise.
+    ///
+    /// This function will always return the same value for the same stream.
+    pub fn can_be_cloned(&self) -> bool {
+        self.reader.can_be_cloned()
+    }
+    /// Attempt to clone the stream, if the stream can be cloned cheaply.
+    /// PANICS if the stream cannot be cloned cheaply.
+    pub fn attempt_clone(&self) -> FormattedSoundStream {
+        self.reader.attempt_clone(self.sample_rate, self.speaker_layout)
+    }
+}
+
 /// This is an object that SMS will hang onto, and will call upon to open sound
-/// files. It must be thread safe.
+/// files and issue warnings. It must be thread safe.
 pub trait SoundDelegate: Send + Sync {
     /// Attempt to open an sound file with the given name. If it doesn't exist,
     /// an IO error occurs, you can't identify the format, or whatever, you
     /// should display or log an error message using an application-specific
     /// mechanism, then return `None`.
     fn open_file(&self, name: &str) -> Option<FormattedSoundStream>;
-    /// Present and/or log a warning.
+    /// Present and/or log a warning in some application-specific way.
     fn warning(&self, message: &str) {
         eprintln!("SMS warning: {}", message);
     }
@@ -98,14 +112,30 @@ pub trait SoundReader<T: Sample>: Send {
     /// permitted to end up earlier than the target, but not later. Returns the
     /// actual *sample frame count*, measured from the beginning of the stream,
     /// that was seeked to.
-    /// 
+    ///
     /// This number must be exact! If you can't provide an exact timestamp,
     /// don't provide seeking! (SMS will work around it.) Again, it's okay if
     /// you can't *seek to an exact timestamp*, but you *do* need to be able to
     /// *know where you've seeked to* and *not seek too late*.
-    /// 
+    ///
     /// Returns None if seeking failed or is impossible, in which case, SMS
     /// will reopen the file instead. Default implementation returns None.
+    ///
+    /// SMS may call `seek(0)` upon opening your stream, to determine if
+    /// seeking is something your decoder supports. You should return `Some`
+    /// only if you are confident that seeking will succeed in the future.
+    ///
+    /// **IMPORTANT NOTE**: Do not implement this if you can seek only forward.
+    /// Do not special case successful seek when coincidentally seeking to
+    /// where the cursor already is. *Do not* implement this by calling your
+    /// own skip routines. If you disregard this warning, SMS will **panic**
+    /// the first time it attempts to loop a stream. If you can only seek
+    /// forward, implement only the skip routines.
+    ///
+    /// You also shouldn't implement this function if seeking is as expensive
+    /// as reopening the file, starting decoding from scratch, and calling
+    /// `skip_*`. If this is the case, just don't implement it. SMS has logic
+    /// that can do that work in a background thread.
     #[allow(unused_variables)]
     fn seek(&mut self, pos: u64) -> Option<u64> { None }
     /// Attempt to skip exactly the given number of *samples*. Failure is not
@@ -118,16 +148,17 @@ pub trait SoundReader<T: Sample>: Send {
     /// 
     /// `buf` is provided as scratch space.
     fn skip_precise(&mut self, count: u64, buf: &mut [MaybeUninit<T>]) -> bool {
-        let mut count = count.checked_sub(self.skip_coarse(count, buf))
+        let ret = self.skip_coarse(count, buf);
+        let mut rem = count.checked_sub(ret)
             .expect("bug in program's sound delegate: skip_coarse skipped too many samples!");
-        while count > 0 {
-            let amt = (buf.len() as u64).min(count) as usize;
+        while rem > 0 {
+            let amt = (buf.len() as u64).min(rem) as usize;
             let red = self.read(&mut buf[..amt]);
             if red == 0 {
                 // premature end? uh oh
                 return false
             }
-            count -= red as u64;
+            rem -= red as u64;
         }
         true
     }
@@ -143,15 +174,32 @@ pub trait SoundReader<T: Sample>: Send {
         0
     }
     /// Returns true if this decoder can be cheaply cloned, false otherwise.
-    /// 
+    ///
     /// Default implementation assumes non-cloneability.
+    ///
+    /// This function must always return the same value for the same stream. If
+    /// the observable value ever changes, panic may ensue.
     fn can_be_cloned(&self) -> bool { false }
-    /// If this is a cloneable decoder, returns Some(clone). If not, returns
-    /// None. If you claim that you are cloneable, you *must* always succeed!
-    fn attempt_clone(&mut self) -> Option<Box<dyn SoundReader<T>>> { None }
+    /// If this is a cloneable decoder, clone yourself. If not, panic. (The
+    /// default implementation panics.)
+    ///
+    /// Sample rate and speaker layout are provided in case you do not keep
+    /// track of your own sample rate and speaker layout internally.
+    fn attempt_clone(&self, _sample_rate: f32, _speaker_layout: SpeakerLayout) -> FormattedSoundStream {
+        if self.can_be_cloned() {
+            panic!("PROGRAM BUG: this SoundReader claims it can be cloned, but does not implement `attempt_clone`!")
+        }
+        else {
+            panic!("attempted to clone a non-cloneable SoundReader")
+        }
+    }
     /// Attempt to estimate how many *sample frames* are in the entire file,
     /// from beginning to end. This is a BEST GUESS ESTIMATE and may not
     /// reflect the actual value!
+    ///
+    /// SMS will never call this after it has seeked/skipped/read any audio
+    /// data, so it is safe for implementors to assume the cursor is at the
+    /// beginning of the file and give less accurate data otherwise.
     fn estimate_len(&mut self) -> Option<u64> { None }
 }
 
@@ -175,16 +223,52 @@ impl FormattedSoundReader {
             FormattedSoundReader::F32(x) => x.seek(pos),
         }
     }
-    /// Attempt to clone the decoder, if the decoder can be cloned cheaply.
-    /// Returns None if it's not cheap to decode the decoder, or something goes
-    /// wrong in the process. Default implementation returns None.
-    pub fn attempt_clone(&mut self) -> Option<FormattedSoundReader> {
+    /// Returns true if this stream can be cheaply cloned, false otherwise.
+    ///
+    /// This function will always return the same value for the same stream.
+    fn can_be_cloned(&self) -> bool {
         match self {
-            FormattedSoundReader::U8(x) => x.attempt_clone().map(|x| FormattedSoundReader::U8(x)),
-            FormattedSoundReader::U16(x) => x.attempt_clone().map(|x| FormattedSoundReader::U16(x)),
-            FormattedSoundReader::I8(x) => x.attempt_clone().map(|x| FormattedSoundReader::I8(x)),
-            FormattedSoundReader::I16(x) => x.attempt_clone().map(|x| FormattedSoundReader::I16(x)),
-            FormattedSoundReader::F32(x) => x.attempt_clone().map(|x| FormattedSoundReader::F32(x)),
+            FormattedSoundReader::U8(x) => x.can_be_cloned(),
+            FormattedSoundReader::U16(x) => x.can_be_cloned(),
+            FormattedSoundReader::I8(x) => x.can_be_cloned(),
+            FormattedSoundReader::I16(x) => x.can_be_cloned(),
+            FormattedSoundReader::F32(x) => x.can_be_cloned(),
         }
+    }
+    /// Attempt to clone the stream, if the stream can be cloned cheaply.
+    /// PANICS if the stream cannot be cloned cheaply.
+    pub fn attempt_clone(&self, sample_rate: f32, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
+        match self {
+            FormattedSoundReader::U8(x) => x.attempt_clone(sample_rate, speaker_layout),
+            FormattedSoundReader::U16(x) => x.attempt_clone(sample_rate, speaker_layout),
+            FormattedSoundReader::I8(x) => x.attempt_clone(sample_rate, speaker_layout),
+            FormattedSoundReader::I16(x) => x.attempt_clone(sample_rate, speaker_layout),
+            FormattedSoundReader::F32(x) => x.attempt_clone(sample_rate, speaker_layout),
+        }
+    }
+    /// Attempt to skip exactly the given number of *samples*. Failure is not
+    /// an option. Returns true if there is more sound data to come, false if
+    /// we have reached the end of the sound.
+    /// 
+    /// We will need 4-16KiB of stack space.
+    pub fn skip(&mut self, count: u64) -> bool {
+        match self {
+            FormattedSoundReader::U8(x) => typed_skip(x, count),
+            FormattedSoundReader::U16(x) => typed_skip(x, count),
+            FormattedSoundReader::I8(x) => typed_skip(x, count),
+            FormattedSoundReader::I16(x) => typed_skip(x, count),
+            FormattedSoundReader::F32(x) => typed_skip(x, count),
+        }
+    }
+}
+
+fn typed_skip<T: Sample>(reader: &mut Box<dyn SoundReader<T>>, count: u64) -> bool {
+    let mut buf = [MaybeUninit::uninit(); 4096];
+    reader.skip_precise(count, &mut buf[..])
+}
+
+impl<T: Sample> From<Box<dyn SoundReader<T>>> for FormattedSoundReader {
+    fn from(value: Box<dyn SoundReader<T>>) -> FormattedSoundReader {
+        T::make_formatted_sound_reader_from(value)
     }
 }
