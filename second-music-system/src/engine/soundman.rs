@@ -55,7 +55,7 @@ struct SoundInfo {
 
 pub(crate) struct SoundMan {
     bufferman: BufferMan,
-    streamman: StreamMan,
+    streamman: ForegroundStreamMan,
     delegate: Arc<dyn SoundDelegate>,
     sound_infos: HashMap<String, SoundInfo>,
     loading_rt: Option<Arc<Runtime>>,
@@ -82,7 +82,7 @@ impl SoundMan {
                 Builder::new_current_thread()
                     .enable_time()
                     .build()
-                    .expect("unable to create unihreaded Tokio runtime")
+                    .expect("unable to create unithreaded Tokio runtime")
             };
             let runtime_ref = Arc::new(runtime);
             spin_off_tokio(&runtime_ref);
@@ -90,7 +90,7 @@ impl SoundMan {
         } else { None };
         SoundMan {
             bufferman: BufferMan::new(delegate.clone()),
-            streamman: StreamMan::new(delegate.clone()),
+            streamman: ForegroundStreamMan::new(delegate.clone()),
             delegate,
             sound_infos: HashMap::new(),
             loading_rt,

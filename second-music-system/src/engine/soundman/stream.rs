@@ -9,16 +9,6 @@ use std::{
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
-/// A single decoder for a given Sound, which may or may not have become
-/// available yet.
-enum CachedStream {
-    /// A stream that hasn't been loaded yet, but whose loading has been
-    /// requested.
-    LoadingStream(oneshot::Receiver<(FormattedSoundStream, bool)>),
-    /// A stream that has been loaded, and is currently ready.
-    LoadedStream(FormattedSoundStream, bool),
-}
-
 struct EmptyStream;
 impl SoundReader<u8> for EmptyStream {
     fn attempt_clone(&self, sample_rate: f32, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
@@ -57,6 +47,86 @@ fn empty_stream() -> FormattedSoundStream {
         speaker_layout: SpeakerLayout::Mono,
         reader: FormattedSoundReader::U8(Box::new(EmptyStream)),
     }
+}
+
+fn load_stream(delegate: &dyn SoundDelegate, name: &str, start_point: f32) -> (FormattedSoundStream, bool) {
+    eprintln!("called load_stream({name:?})");
+    match delegate.open_file(name) {
+        None => {
+            delegate.warning(&format!("Unable to open sound file: {:?}", name));
+            (empty_stream(), true)
+        },
+        Some(mut stream) => {
+            let start_point = (start_point * stream.sample_rate).floor() as u64;
+            let can_seek = match stream.reader.seek(start_point) {
+                None => {
+                    false
+                },
+                Some(x) => {
+                    let residual = match start_point.checked_sub(x) {
+                        None => {
+                            panic!("tried to seek to {}, ended up at {}. overshooting is not allowed!", start_point, x);
+                        },
+                        Some(x) => x,
+                    };
+                    if residual > 0 {
+                        stream.reader.skip(residual * stream.speaker_layout.get_num_channels() as u64);
+                    }
+                    true
+                },
+            };
+            if !can_seek {
+                stream.reader.skip(start_point * stream.speaker_layout.get_num_channels() as u64);
+            }
+            (stream, can_seek)
+        },
+    }
+}
+
+pub(crate) struct ForegroundStreamMan {
+    delegate: Arc<dyn SoundDelegate>,
+}
+
+impl ForegroundStreamMan {
+    pub(crate) fn new(delegate: Arc<dyn SoundDelegate>) -> ForegroundStreamMan {
+        ForegroundStreamMan { delegate }
+    }
+}
+
+impl SoundManImpl for ForegroundStreamMan {
+    fn load(&mut self, _sound: &str, _start: f32, loading_rt: &Option<Arc<Runtime>>) {
+        assert!(loading_rt.is_none(), "ForegroundStreamMan is being used, but there is a background loading runtime!");
+    }
+
+    fn unload(&mut self, _sound: &str, _start: f32) -> bool {
+        true
+    }
+
+    fn unload_all(&mut self) {
+    }
+
+    fn is_ready(&mut self, _sound: &str, _start: f32) -> bool {
+        true
+    }
+    fn get_sound(
+        &mut self,
+        sound: &str,
+        start: f32,
+        end: f32,
+    ) -> Option<FormattedSoundStream> {
+        Some(load_stream(&*self.delegate, sound, start).0)
+    }
+}
+
+#[cfg(never)] mod die {
+/// A single decoder for a given Sound, which may or may not have become
+/// available yet.
+enum CachedStream {
+    /// A stream that hasn't been loaded yet, but whose loading has been
+    /// requested.
+    LoadingStream(oneshot::Receiver<(FormattedSoundStream, bool)>),
+    /// A stream that has been loaded, and is currently ready.
+    LoadedStream(FormattedSoundStream, bool),
 }
 
 impl CachedStream {
@@ -405,36 +475,4 @@ impl StreamMan {
     }
 }
 
-fn load_stream(delegate: &dyn SoundDelegate, name: &str, start_point: f32) -> (FormattedSoundStream, bool) {
-    eprintln!("called load_stream({name:?})");
-    match delegate.open_file(name) {
-        None => {
-            delegate.warning(&format!("Unable to open sound file: {:?}", name));
-            (empty_stream(), true)
-        },
-        Some(mut stream) => {
-            let start_point = (start_point * stream.sample_rate).floor() as u64;
-            let can_seek = match stream.reader.seek(start_point) {
-                None => {
-                    false
-                },
-                Some(x) => {
-                    let residual = match start_point.checked_sub(x) {
-                        None => {
-                            panic!("tried to seek to {}, ended up at {}. overshooting is not allowed!", start_point, x);
-                        },
-                        Some(x) => x,
-                    };
-                    if residual > 0 {
-                        stream.reader.skip(residual * stream.speaker_layout.get_num_channels() as u64);
-                    }
-                    true
-                },
-            };
-            if !can_seek {
-                stream.reader.skip(start_point * stream.speaker_layout.get_num_channels() as u64);
-            }
-            (stream, can_seek)
-        },
-    }
 }
