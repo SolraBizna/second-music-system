@@ -55,7 +55,7 @@ struct SoundInfo {
 
 pub(crate) struct SoundMan {
     bufferman: BufferMan,
-    streamman: ForegroundStreamMan,
+    streamman: StreamMan,
     delegate: Arc<dyn SoundDelegate>,
     sound_infos: HashMap<String, SoundInfo>,
     loading_rt: Option<Arc<Runtime>>,
@@ -90,7 +90,7 @@ impl SoundMan {
         } else { None };
         SoundMan {
             bufferman: BufferMan::new(delegate.clone()),
-            streamman: ForegroundStreamMan::new(delegate.clone()),
+            streamman: StreamMan::new(delegate.clone(), loading_rt.as_ref()),
             delegate,
             sound_infos: HashMap::new(),
             loading_rt,

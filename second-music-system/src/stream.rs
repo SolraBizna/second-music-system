@@ -188,8 +188,7 @@ pub trait SoundReader<T: Sample>: Send {
     fn attempt_clone(&self, _sample_rate: f32, _speaker_layout: SpeakerLayout) -> FormattedSoundStream {
         if self.can_be_cloned() {
             panic!("PROGRAM BUG: this SoundReader claims it can be cloned, but does not implement `attempt_clone`!")
-        }
-        else {
+        } else {
             panic!("attempted to clone a non-cloneable SoundReader")
         }
     }

@@ -2,10 +2,13 @@ use super::*;
 
 use std::{
     borrow::BorrowMut,
+    collections::{HashMap, hash_map::Entry as HashMapEntry},
     hash::{Hash, Hasher},
+    ops::Deref,
     sync::{Arc, Weak},
 };
 
+use vecmap::{VecMap, map::Entry as VecMapEntry};
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
@@ -83,6 +86,9 @@ fn load_stream(delegate: &dyn SoundDelegate, name: &str, start_point: f32) -> (F
     }
 }
 
+/// A simple SoundMan implementation that loads streams when `get` is called
+/// and otherwise performs no bookkeeping. Used for StreamMan when background
+/// loading is not in effect.
 pub(crate) struct ForegroundStreamMan {
     delegate: Arc<dyn SoundDelegate>,
 }
@@ -118,9 +124,84 @@ impl SoundManImpl for ForegroundStreamMan {
     }
 }
 
-#[cfg(never)] mod die {
-/// A single decoder for a given Sound, which may or may not have become
-/// available yet.
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// A non-NaN, positive f32.
+// TODO: infect BufferMan with this, make it part of SoundMan
+struct StartTime(f32);
+impl StartTime {
+    fn new(start: f32, delegate: &dyn SoundDelegate) -> StartTime {
+        if !start.is_finite() {
+            delegate.warning(&format!("reference to a non-finite start time"));
+            StartTime(0.0)
+        } else if !start.is_sign_positive() {
+            delegate.warning(&format!("reference to a negative start time"));
+            StartTime(0.0)
+        } else { StartTime(start) }
+    }
+    fn target_sample_frame_count(&self, sample_rate: f32) -> u64 {
+        (self.0 * sample_rate).floor() as u64
+    }
+}
+impl Eq for StartTime {}
+impl PartialOrd for StartTime {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.to_bits().partial_cmp(&other.0.to_bits())
+    }
+}
+impl Ord for StartTime {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.to_bits().cmp(&other.0.to_bits())
+    }
+}
+impl Hash for StartTime {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        debug_assert!(self.0.is_finite() && self.0.is_sign_positive());
+        self.0.to_bits().hash(state);
+    }
+}
+impl Deref for StartTime {
+    type Target = f32;
+    fn deref(&self) -> &f32 {
+        &self.0
+    }
+}
+
+/// Tea, predicated on a question.
+#[derive(Debug)]
+enum Predicated<T,F=(),U=()> {
+    /// We don't yet know whether tea is available.
+    Unknown(U),
+    /// We know that tea is unavailable.
+    Unavailable(F),
+    /// We know that tea is available, here it is.
+    Available(T),
+}
+
+impl<T, F, U> Predicated<T, F, U> {
+    pub fn as_ref(&self) -> Predicated<&T,&F,&U> {
+        match self {
+            Predicated::Unknown(x) => Predicated::Unknown(x),
+            Predicated::Unavailable(x) => Predicated::Unavailable(x),
+            Predicated::Available(x) => Predicated::Available(x),
+        }
+    }
+    pub fn as_mut(&mut self) -> Predicated<&mut T, &mut F, &mut U> {
+        match self {
+            Predicated::Unknown(x) => Predicated::Unknown(x),
+            Predicated::Unavailable(x) => Predicated::Unavailable(x),
+            Predicated::Available(x) => Predicated::Available(x),
+        }
+    }
+}
+
+impl<T, F, U: Default> Default for Predicated<T,F,U> {
+    fn default() -> Self {
+        Self::Unknown(U::default())
+    }
+}
+
+/// A single decoder for a particular Sound at a particular start point, which
+/// may or may not have become available yet.
 enum CachedStream {
     /// A stream that hasn't been loaded yet, but whose loading has been
     /// requested.
@@ -130,6 +211,13 @@ enum CachedStream {
 }
 
 impl CachedStream {
+    fn begin_loading(delegate: Arc<dyn SoundDelegate>, name: String, start_point: StartTime, loading_runtime: &Arc<Runtime>) -> CachedStream {
+        let (tx, rx) = oneshot::channel();
+        loading_runtime.spawn(async move {
+            let _ = tx.send(load_stream(&*delegate, &name, *start_point));
+        });
+        CachedStream::LoadingStream(rx)
+    }
     /// If we are a `LoadingStream`, check if we should actually become a
     /// `LoadedStream` instead. If so, mutate.
     fn check_loading(&mut self, delegate: &dyn SoundDelegate, name: &str) {
@@ -160,287 +248,256 @@ impl CachedStream {
     }
 }
 
-/// Information used to create new stream decoders. Only needed if the stream
-/// can't be cloned.
-struct StreamCacheReintake {
-    delegate: Weak<dyn SoundDelegate>,
-    // TODO: please intern strings
-    name: String,
-    start_point: f32,
-    loading_runtime: Option<Weak<Runtime>>,
+/// Refers to only the requested loadings of a particular sound at a
+/// particular start point.
+struct AtStartPoint {
+    loads: u32,
+    // If cloneable, just one copy of the stream, ready to clone.
+    // If not cloneable, a whole array of CachedStreams, with length kept
+    // equal to `loads`.
+    // If not loaded yet, a single CachedStream of the first attempt to load.
+    cloneable: Predicated<FormattedSoundStream, Vec<CachedStream>, CachedStream>,
 }
 
-/// One or more decoders for a given sound AND start point. Some or all of the
-/// decoders may not be available yet.
-struct CachedStreams {
-    reintake: Option<StreamCacheReintake>,
-    cached: Vec<CachedStream>,
-    desired_count: usize,
-    can_clone: Option<bool>,
-    can_seek: Option<bool>,
-}
-
-impl CachedStreams {
-    fn new(reintake: StreamCacheReintake) -> CachedStreams {
-        CachedStreams {
-            reintake: Some(reintake),
-            cached: vec![],
-            desired_count: 0,
-            can_clone: None,
-            can_seek: None,
+impl AtStartPoint {
+    fn load_one_more(&mut self, delegate: &Arc<dyn SoundDelegate>, name: &str, start_point: StartTime, loading_runtime: &Arc<Runtime>) {
+        self.loads += 1;
+        if let Predicated::Unavailable(x) = self.cloneable.as_mut() {
+            while x.len() < self.loads as usize {
+                x.push(CachedStream::begin_loading(delegate.clone(), name.to_string(), start_point, loading_runtime));
+            }   
         }
     }
-    /// Transform into an empty husk of our previous self. Any future streams
-    /// that come from us will be empty. No further attempts to load will be
-    /// made.
-    fn nullify(&mut self) {
-        self.reintake = None;
-        self.cached = vec![CachedStream::LoadedStream(empty_stream(), true)];
-        self.can_clone = Some(true);
-        self.can_seek = Some(true);
-    }
-    fn load(&mut self) {
-        self.desired_count += 1;
-        if self.reintake.is_none() { return }
-        match self.can_clone {
-            Some(true) => assert!(self.cached.len() > 0),
-            Some(false) => while self.cached.len() < self.desired_count && self.load_one_more() {},
-            None => if self.cached.is_empty() { self.load_one_more(); },
-        }
-    }
-    fn load_one_more(&mut self) -> bool {
-        let reintake = self.reintake.as_ref().expect("SMS logic error: reintake was destroyed but it was still needed!");
-        match reintake.loading_runtime.as_ref() {
-            None => {
-                // We will initiate the load on demand.
-                false
-            },
-            Some(loading_runtime) => {
-                let (loading_runtime, delegate) = match (loading_runtime.upgrade(), reintake.delegate.upgrade()) {
-                    (Some(a), Some(b)) => (a, b),
-                    _ => {
-                        // something went away, which means we are closing
-                        // down. accept our fate quietly
-                        self.nullify();
-                        return false
+    fn check_load(&mut self, delegate: &Arc<dyn SoundDelegate>, sound: &str, start_point: StartTime, loading_rt: &Weak<Runtime>) -> Option<()> {
+        if let Predicated::Unknown(cached) = self.cloneable.as_mut() {
+            cached.check_loading(&**delegate, sound);
+            match cached {
+                CachedStream::LoadingStream(_) => (),
+                CachedStream::LoadedStream(stream, can_seek) => {
+                    let mut alt = FormattedSoundStream {
+                        sample_rate: stream.sample_rate,
+                        speaker_layout: stream.speaker_layout,
+                        reader: FormattedSoundReader::U8(Box::new(EmptyStream)),
+                    };
+                    std::mem::swap(stream, &mut alt);
+                    let stream = alt;
+                    if stream.can_be_cloned() {
+                        self.cloneable = Predicated::Available(stream);
+                    } else {
+                        let mut vec = Vec::with_capacity(self.loads as usize);
+                        vec.push(CachedStream::LoadedStream(stream, *can_seek));
+                        let loading_rt = loading_rt.upgrade()?;
+                        while vec.len() < self.loads as usize {
+                            vec.push(CachedStream::begin_loading(delegate.clone(), sound.to_string(), start_point, &loading_rt));
+                        }
+                        self.cloneable = Predicated::Unavailable(vec);
                     }
-                };
-                let (tx, rx) = oneshot::channel();
-                let name = reintake.name.clone();
-                let start_point = reintake.start_point;
-                loading_runtime.spawn(async move {
-                    let _ = tx.send(load_stream(&*delegate, &name, start_point));
-                });
-                self.cached.push(CachedStream::LoadingStream(rx));
+                },
+            }
+        }
+        Some(())
+    }
+}
+
+/// Contains all of the requested loadings of an individual sound, potentially
+/// at different starting points.
+#[derive(Default)]
+struct IndividualSound {
+    /// If the stream is cloneable *and* seekable, here's a decoder at the
+    /// beginning of this sound.
+    cloneable_and_seekable: Predicated<FormattedSoundStream>,
+    カンバン: VecMap<StartTime, AtStartPoint>,
+}
+
+/// A SoundMan implementation that performs stream loading in the background,
+/// but decodes the audio on an as-needed basis in the sound thread. Used as
+/// StreamMan when background loading is in effect.
+pub(crate) struct BackgroundStreamMan {
+    delegate: Arc<dyn SoundDelegate>,
+    sounds: HashMap<String, IndividualSound>,
+    loading_rt: Weak<Runtime>,
+}
+
+impl BackgroundStreamMan {
+    pub(crate) fn new(delegate: Arc<dyn SoundDelegate>, loading_rt: &Arc<Runtime>) -> BackgroundStreamMan {
+        BackgroundStreamMan {
+            delegate,
+            sounds: HashMap::new(),
+            loading_rt: Arc::downgrade(loading_rt),
+        }
+    }
+}
+
+impl SoundManImpl for BackgroundStreamMan {
+    fn load(&mut self, sound: &str, start: f32, loading_rt: &Option<Arc<Runtime>>) {
+        let loading_rt = loading_rt.as_ref().unwrap();
+        let individual_sound = if let Some(individual_sound) = self.sounds.get_mut(sound) {
+            individual_sound
+        } else {
+            self.sounds.entry(sound.to_string()).or_default().borrow_mut()
+        };
+        let start = StartTime::new(start, &*self.delegate);
+        match individual_sound.カンバン.entry(start) {
+            VecMapEntry::Occupied(mut ent) => {
+                ent.get_mut().load_one_more(&self.delegate, sound, start, loading_rt);
+            },
+            VecMapEntry::Vacant(ent) => {
+                match individual_sound.cloneable_and_seekable.as_ref() {
+                    Predicated::Available(parent) => {
+                        let mut child = parent.attempt_clone();
+                        let target_point = start.target_sample_frame_count(child.sample_rate);
+                        let sought = child.reader.seek(target_point).expect("Bug in delegate: stream stopped being seekable!");
+                        if sought < target_point {
+                            // TODO: we should like to do this in a background
+                            // thread
+                            child.reader.skip((target_point - sought) * child.speaker_layout.get_num_channels() as u64);
+                        }
+                        ent.insert(AtStartPoint {
+                            loads: 1,
+                            cloneable: Predicated::Available(child),
+                        });
+                    },
+                    _ => {
+                        ent.insert(AtStartPoint {
+                            loads: 1,
+                            cloneable: Predicated::Unknown(CachedStream::begin_loading(self.delegate.clone(), sound.to_string(), start, loading_rt)),
+                        });
+                    },
+                }
+            },
+        }
+    }
+    fn unload(&mut self, sound: &str, start: f32) -> bool {
+        let individual_sound = if let Some(individual_sound) = self.sounds.get_mut(sound) {
+            individual_sound
+        } else {
+            self.delegate.warning(&format!("SMS bug: unloaded something not loaded"));
+            return true;
+        };
+        let start = StartTime::new(start, &*self.delegate);
+        match individual_sound.カンバン.entry(start) {
+            VecMapEntry::Occupied(mut ent) => {
+                ent.get_mut().loads -= 1;
+                if ent.get().loads == 0 {
+                    ent.remove();
+                    true
+                } else {
+                    // do not attempt to bring the number of CachedStreams
+                    // down, we will use them up eventually
+                    false
+                }
+            },
+            VecMapEntry::Vacant(_) => {
+                self.delegate.warning(&format!("SMS bug: unloaded something not loaded"));
                 true
             },
         }
     }
-    /// A balanced unload. Returns true if this cache should go away.
-    fn unload(&mut self) -> bool {
-        if self.desired_count == 0 {
-            panic!("SMS logic error: CachedStreams' unload called too many times");
-        }
-        else {
-            self.desired_count -= 1;
-            self.desired_count == 0
+    fn unload_all(&mut self) {
+        self.sounds.clear();
+    }
+    fn is_ready(&mut self, sound: &str, start: f32) -> bool {
+        let individual_sound = if let Some(individual_sound) = self.sounds.get_mut(sound) {
+            individual_sound
+        } else {
+            return false;
+        };
+        let start = StartTime::new(start, &*self.delegate);
+        let カンバン = match individual_sound.カンバン.get_mut(&start) {
+            None => return false,
+            Some(x) => x,
+        };
+        カンバン.check_load(&self.delegate, sound, start, &self.loading_rt);
+        match カンバン.cloneable.as_mut() {
+            Predicated::Unknown(_) => false,
+            Predicated::Unavailable(x) => x.iter_mut().any(|x| {
+                x.check_loading(&*self.delegate, sound);
+                x.is_ready()
+            }),
+            Predicated::Available(_) => true,
         }
     }
-    /// Return true if all requisite instances of this stream are ready to be
-    /// dispensed.
-    fn is_ready(&mut self) -> bool {
-        match self.reintake.as_ref() {
-            Some(reintake) if self.cached.iter().any(CachedStream::needs_check) => {
-                // not loading in background, always ready
-                if reintake.loading_runtime.is_none() {
-                    eprintln!("No runtime");
-                    return true
-                }
-                let delegate = match reintake.delegate.upgrade() {
-                    None => {
-                        self.nullify();
-                        return true
+    fn get_sound(
+        &mut self,
+        sound: &str,
+        start: f32,
+        _end: f32,
+    ) -> Option<FormattedSoundStream> {
+        // TODO: end
+        let individual_sound = self.sounds.get_mut(sound)?;
+        let start = StartTime::new(start, &*self.delegate);
+        let カンバン = individual_sound.カンバン.get_mut(&start)?;
+        カンバン.check_load(&self.delegate, sound, start, &self.loading_rt);
+        match カンバン.cloneable.as_mut() {
+            Predicated::Unknown(_) => unreachable!(),
+            Predicated::Unavailable(vec) => {
+                if let Some(i) = vec.iter_mut().position(|x| {
+                    x.check_loading(&*self.delegate, sound);
+                    x.is_ready()
+                }) {
+                    let loading_rt = self.loading_rt.upgrade()?;
+                    let ret = vec.remove(i);
+                    let ret = match ret {
+                        CachedStream::LoadedStream(x, _) => x,
+                        _ => unreachable!(),
+                    };
+                    while vec.len() < カンバン.loads as usize {
+                        vec.push(CachedStream::begin_loading(self.delegate.clone(), sound.to_string(), start, &loading_rt));
                     }
-                    Some(x) => x,
-                };
-                for x in self.cached.iter_mut() {
-                    x.check_loading(&*delegate, &reintake.name);
-                }
-            }
-            _ => return true, // ???
-        }
-        if self.can_clone == Some(true) {
-            self.cached.iter().any(CachedStream::is_ready)
-        }
-        else {
-            self.cached.iter().filter(|x| x.is_ready()).count()
-                >= self.desired_count
-        }
-    }
-    /// Take a stream out of the cache. If background loading is in effect,
-    /// prepare a background task to load the stream again.
-    fn get_sound(&mut self) -> Option<FormattedSoundStream> {
-        if let Some(reintake) = self.reintake.as_ref() {
-            if reintake.loading_runtime.is_none() {
-                // We are not doing background loading. Load it now.
-                let delegate = match reintake.delegate.upgrade() {
-                    None => {
-                        self.nullify();
-                        return Some(empty_stream())
-                    }
-                    Some(x) => x,
-                };
-                let (stream, _can_seek) = load_stream(&*delegate, &reintake.name, reintake.start_point);
-                return Some(stream);
-            }
-        }
-        match self.can_clone {
-            Some(true) => {
-                // We've already determined that we can be cloned.
-                debug_assert!(self.cached.len() == 1);
-                match &self.cached[0] {
-                    CachedStream::LoadedStream(x, _) => {
-                        return Some(x.attempt_clone())
-                    },
-                    _ => unreachable!(),
-                }
+                    Some(ret)
+                } else { None }
             },
-            Some(false) => {
-                // We cannot be cloned, and we know it.
-                for n in 0 .. self.cached.len() {
-                    if self.cached[n].is_ready() {
-                        let ret = self.cached.remove(n);
-                        if let CachedStream::LoadedStream(ret, _) = ret {
-                            self.load_one_more();
-                            return Some(ret)
-                        }
-                        else { unreachable!() }
-                    }
-                }
-                return None
-            },
-            None => {
-                // Find out if we can be cloned and seeked.
-                assert!(self.cached.len() == 1);
-                if !self.cached[0].is_ready() {
-                    return None
-                }
-                let stream = self.cached.remove(0);
-                let (stream, can_seek) = match stream {
-                    CachedStream::LoadedStream(a,b) => (a,b),
-                    _ => unreachable!(),
-                };
-                self.can_seek = Some(can_seek);
-                if stream.can_be_cloned() {
-                    // We can!
-                    self.can_clone = Some(true);
-                    self.cached.push(CachedStream::LoadedStream(stream.attempt_clone(), can_seek));
-                }
-                else {
-                    // We can't be cloned.
-                    self.can_clone = Some(false);
-                    while self.cached.len() < self.desired_count && self.load_one_more() {}
-                }
-                return Some(stream)
+            Predicated::Available(parent) => {
+                Some(parent.attempt_clone())
             },
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-/// A non-NaN f32.
-struct StartTime(f32);
-impl Eq for StartTime {}
-impl Hash for StartTime {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.to_bits().hash(state);
+/// Either a ForegroundStreamMan or a BackgroundStreamMan, depending on whether
+/// background loading is in use.
+///
+/// Yes, I could have used a `dyn SoundManImpl` instead of making this enum.
+/// But arbitrary jumps are predicted less well than a nearly-always-consistent
+/// if.
+pub(crate) enum StreamMan {
+    Foreground(ForegroundStreamMan),
+    Background(BackgroundStreamMan),
+}
+
+impl StreamMan {
+    pub(crate) fn new(delegate: Arc<dyn SoundDelegate>, loading_rt: Option<&Arc<Runtime>>) -> StreamMan {
+        match loading_rt {
+            None => StreamMan::Foreground(ForegroundStreamMan::new(delegate)),
+            Some(loading_rt) => StreamMan::Background(BackgroundStreamMan::new(delegate, loading_rt)),
+        }
     }
-}
-
-/// Manages cached *streams*. We initialize decoders for them, prerolled to
-/// the requested start positions, and dish them out on request. We use a lot
-/// more CPU time, but a lot less memory.
-pub struct StreamMan {
-    delegate: Arc<dyn SoundDelegate>,
-    streams: HashMap<String, HashMap<StartTime, Arc<Mutex<CachedStreams>>>>,
-}
-
-fn safe_and_positive(start: f32, delegate: &Arc<dyn SoundDelegate>) -> f32 {
-    if start.is_nan() {
-        delegate.warning(&format!("INTERNAL SMS BUG: StreamMan tried to load at a NaN start time, replacing with 0"));
-        0.0
-    } else if start.is_infinite() {
-        delegate.warning(&format!("INTERNAL SMS BUG: StreamMan tried to load at an infinite start time, replacing with 0"));
-        0.0
-    } else if start < 0.0 {
-        delegate.warning(&format!("INTERNAL SMS BUG: StreamMan tried to load at a negative start time ({:?}), replacing with 0", start));
-        0.0
-    } else if start == 0.0 { 0.0 } // make negative zero into positive zero
-    else { start }
 }
 
 impl SoundManImpl for StreamMan {
     fn load(&mut self, sound: &str, start: f32, loading_rt: &Option<Arc<Runtime>>) {
-        let start = safe_and_positive(start, &self.delegate);
-        let sound_cache = match self.streams.get_mut(sound) {
-            Some(x) => x,
-            None => {
-                self.streams.insert(sound.to_string(), HashMap::new());
-                self.streams.get_mut(sound).unwrap()
-            },
-        };
-        let point_cache = sound_cache.entry(StartTime(start)).or_insert_with(||{
-             Arc::new(Mutex::new(CachedStreams::new(StreamCacheReintake {
-                delegate: Arc::downgrade(&self.delegate),
-                name: sound.to_string(),
-                start_point: start,
-                loading_runtime: loading_rt.as_ref().map(Arc::downgrade),
-            })))
-        }).borrow_mut();
-        let mut point_cache = point_cache.lock();
-        point_cache.load();
+        match self {
+            StreamMan::Foreground(x) => x.load(sound, start, loading_rt),
+            StreamMan::Background(x) => x.load(sound, start, loading_rt),
+        }
     }
     fn unload(&mut self, sound: &str, start: f32) -> bool {
-        let start = safe_and_positive(start, &self.delegate);
-        let sound_cache = match self.streams.get_mut(sound) {
-            Some(x) => x,
-            None => {
-                self.delegate.warning(&format!("INTERNAL SMS BUG: unload({:?},{:?}) called but the sound was already unloaded!", sound, start));
-                return true
-            },
-        };
-        let point_cache = match sound_cache.get_mut(&StartTime(start)) {
-            Some(x) => x,
-            None => {
-                self.delegate.warning(&format!("INTERNAL SMS BUG: unload({:?},{:?}) called but that sound was not loaded at that start time!", sound, start));
-                return true
-            },
-        };
-        let mut point_cache = point_cache.lock();
-        let should_remove = point_cache.unload();
-        if should_remove {
-            drop(point_cache);
-            sound_cache.remove(&StartTime(start));
-            if sound_cache.is_empty() {
-                self.streams.remove(sound);
-            }
+        match self {
+            StreamMan::Foreground(x) => x.unload(sound, start),
+            StreamMan::Background(x) => x.unload(sound, start),
         }
-        should_remove
     }
     fn unload_all(&mut self) {
-        self.streams.clear();
+        match self {
+            StreamMan::Foreground(x) => x.unload_all(),
+            StreamMan::Background(x) => x.unload_all(),
+        }
     }
     fn is_ready(&mut self, sound: &str, start: f32) -> bool {
-        let start = safe_and_positive(start, &self.delegate);
-        let sound_cache = match self.streams.get_mut(sound) {
-            Some(x) => x,
-            None => return false,
-        };
-        let point_cache = match sound_cache.get_mut(&StartTime(start)) {
-            Some(x) => x,
-            None => return false,
-        };
-        point_cache.lock().is_ready()
+        match self {
+            StreamMan::Foreground(x) => x.is_ready(sound, start),
+            StreamMan::Background(x) => x.is_ready(sound, start),
+        }
     }
     fn get_sound(
         &mut self,
@@ -448,31 +505,9 @@ impl SoundManImpl for StreamMan {
         start: f32,
         end: f32,
     ) -> Option<FormattedSoundStream> {
-        let start = safe_and_positive(start, &self.delegate);
-        let end = safe_and_positive(end, &self.delegate);
-        if end <= start {
-            self.delegate.warning(&format!("attempted to stream a sound of zero or negative length"));
-            return Some(empty_stream())
-        }
-        let sound_cache = match self.streams.get_mut(sound) {
-            Some(x) => x,
-            None => return None,
-        };
-        let point_cache = match sound_cache.get_mut(&StartTime(start)) {
-            Some(x) => x,
-            None => return None,
-        };
-        point_cache.lock().get_sound()
-    }
-}
-
-impl StreamMan {
-    pub fn new(delegate: Arc<dyn SoundDelegate>) -> StreamMan {
-        StreamMan {
-            delegate,
-            streams: HashMap::new(),
+        match self {
+            StreamMan::Foreground(x) => x.get_sound(sound, start, end),
+            StreamMan::Background(x) => x.get_sound(sound, start, end),
         }
     }
-}
-
 }
