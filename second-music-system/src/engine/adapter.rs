@@ -11,12 +11,10 @@ pub(crate) fn adaptify(
     delegate: &Arc<dyn SoundDelegate>,
     soundman: &mut SoundMan,
     sound: &Sound,
-    fade_in: f32, length: Option<f32>, fade_out: f32,
-    out_sample_rate: f32, out_speaker_layout: SpeakerLayout,
+    fade_in: PosFloat, length: Option<PosFloat>, fade_out: PosFloat,
+    out_sample_rate: PosFloat, out_speaker_layout: SpeakerLayout,
 ) -> Option<Box<dyn SoundReader<f32>>> {
-    eprintln!("Get {:?}?", sound.name);
     let stream = soundman.get_sound(sound)?;
-    eprintln!("Got!");
     let in_sample_rate = stream.sample_rate;
     let in_speaker_layout = stream.speaker_layout;
     /*

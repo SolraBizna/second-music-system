@@ -10,16 +10,27 @@ use parking_lot::RwLock;
 
 #[macro_use]
 mod din;
+
 mod data;
+mod delegate;
 mod engine;
 mod fader;
-mod stream;
+mod reader;
+mod posfloat;
 
 use data::*;
+#[doc(inline)]
 pub use data::StringOrNumber;
+#[doc(inline)]
+pub use delegate::*;
+#[doc(inline)]
 pub use engine::*;
+#[doc(inline)]
 pub use fader::*;
-pub use stream::*;
+#[doc(inline)]
+pub use posfloat::*;
+#[doc(inline)]
+pub use reader::*;
 
 /// Encapsulates all the information about a soundtrack: what files to play,
 /// how to play them, etc. This is purely inert data. It can be built up
@@ -41,16 +52,6 @@ impl Soundtrack {
     }
     pub fn from_source(source: &str) -> Result<Soundtrack, String> {
         Soundtrack::new().parse_source(source)
-    }
-}
-
-trait SecondsToIndexHack {
-    fn seconds_to_index(&self, sample_rate: f32) -> u64;
-}
-
-impl SecondsToIndexHack for f32 {
-    fn seconds_to_index(&self, sample_rate: f32) -> u64 {
-        (self * sample_rate).floor() as u64
     }
 }
 

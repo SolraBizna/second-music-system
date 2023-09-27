@@ -15,17 +15,17 @@ pub use stream::*;
 pub(crate) trait SoundManImpl {
     /// Load the given sound. Recursive; call `load` N times, and you have to
     /// call `unload` N times before it will take effect.
-    fn load(&mut self, sound: &str, start: f32, loading_rt: &Option<Arc<Runtime>>);
+    fn load(&mut self, sound: &str, start: PosFloat, loading_rt: &Option<Arc<Runtime>>);
     /// Unload the given sound. The sound will actually stick around if it's
     /// currently being referenced by a decoder. Return true if the sound's
     /// live reference count becomes zero.
-    fn unload(&mut self, sound: &str, start: f32) -> bool;
+    fn unload(&mut self, sound: &str, start: PosFloat) -> bool;
     /// Unload all sounds. As if `unload` were called on every currently loaded
     /// sound.
     fn unload_all(&mut self);
     /// Returns whether the given sound is *ready*, i.e. currently loaded and
     /// not awaiting.
-    fn is_ready(&mut self, sound: &str, start: f32) -> bool;
+    fn is_ready(&mut self, sound: &str, start: PosFloat) -> bool;
     /// Request an instance of the given sound. If it's preloaded, this simply
     /// returns a reference to the preloaded sound. If it's streamed, this
     /// returns the decoder state for the given sound, and will (if background
@@ -40,8 +40,8 @@ pub(crate) trait SoundManImpl {
     fn get_sound(
         &mut self,
         sound: &str,
-        start: f32,
-        end: f32,
+        start: PosFloat,
+        end: PosFloat,
     ) -> Option<FormattedSoundStream>;
 }
 

@@ -9,9 +9,9 @@ use super::*;
         ]),
         Ok(Timebase {
             stages: vec![
-                TimebaseStage { one_based: true, multiplier: 2.0 },
-                TimebaseStage { one_based: false, multiplier: 0.5 },
-                TimebaseStage { one_based: false, multiplier: 1.0 / 64.0 }
+                TimebaseStage { one_based: true, multiplier: PosFloat::new_clamped(2.0) },
+                TimebaseStage { one_based: false, multiplier: PosFloat::new_clamped(0.5) },
+                TimebaseStage { one_based: false, multiplier: PosFloat::new_clamped(1.0 / 64.0) }
             ]
         })
     );
@@ -26,8 +26,8 @@ use super::*;
         Sound {
             name: "test1.mp3".to_string(),
             path: "test1.mp3".to_string(),
-            start: 0.0,
-            end: 32.0,
+            start: PosFloat::ZERO,
+            end: PosFloat::new_clamped(32.0),
             stream: false,
         }
     );
@@ -42,8 +42,8 @@ sound test1.mp3
     Sound {
         name: "test1.mp3".to_string(),
         path: "test1.mp3".to_string(),
-        start: 0.0,
-        end: 32.0,
+        start: PosFloat::ZERO,
+        end: PosFloat::new_clamped(32.0),
         stream: false,
     });
     assert_eq!(soundtrack.sequences.len(), 0);
@@ -88,7 +88,7 @@ fn sound_with_null_name_explicit_nonnull_path_parse() {
         Sequence::parse_din_node(&node, &timebases).unwrap(),
         Sequence {
             name: "test1".to_string(),
-            length: 32.0,
+            length: PosFloat::new_clamped(32.0),
             elements: vec![],
         }
     );
@@ -119,7 +119,7 @@ sequence test1
         sequence_one,
         Sequence {
             name: "test1".to_string(),
-            length: 32.0,
+            length: PosFloat::new_clamped(32.0),
             elements: vec![],
         }
     );
@@ -127,9 +127,9 @@ sequence test1
         sequence_two,
         Sequence {
             name: "test2".to_string(),
-            length: 64.0,
+            length: PosFloat::new_clamped(64.0),
             elements: vec![
-                (32.0, SequenceElement::PlaySequence { 
+                (PosFloat::new_clamped(32.0), SequenceElement::PlaySequence { 
                     sequence: "test1".to_string() 
                 }),
             ],
@@ -151,14 +151,14 @@ sequence test2
     assert_eq!(**soundtrack.sequences.get("test1").unwrap(),
         Sequence {
             name: "test1".to_string(),
-            length: 32.0,
+            length: PosFloat::new_clamped(32.0),
             elements: vec![],
         });
     assert_eq!(**soundtrack.sequences.get("test2").unwrap(),
     Sequence {
         name: "test2".to_string(),
-        length: 64.0,
-        elements: vec![(32.0, SequenceElement::PlaySequence { sequence: "test1".to_string() })],
+        length: PosFloat::new_clamped(64.0),
+        elements: vec![(PosFloat::new_clamped(32.0), SequenceElement::PlaySequence { sequence: "test1".to_string() })],
     });
     assert_eq!(soundtrack.flows.len(), 0);
 }
@@ -254,36 +254,19 @@ flow test_flow1
         Sequence::parse_din_node(&node, &timebases).unwrap(),
         Sequence {
             name: "test1".to_string(),
-            length: 32.0,
+            length: PosFloat::new_clamped(32.0),
             elements: vec![
-                (0.0, SequenceElement::PlaySound { 
+                (PosFloat::ZERO, SequenceElement::PlaySound { 
                     sound: format!("test_sound"), 
                     channel: format!("main"), 
-                    fade_in: 0.0, 
-                    length: Some(12.0), 
-                    fade_out: 4.0,
+                    fade_in: PosFloat::ZERO, 
+                    length: Some(PosFloat::new_clamped(12.0)), 
+                    fade_out: PosFloat::new_clamped(4.0),
                 })
             ],
         }
     );
 }
-
-// TODO: condition styles to test:
-//
-// if foo then
-//   bar
-// elseif foo then
-//   bar
-// else if foo then
-//   bar
-// else
-//   baz
-//
-// if foo then bar
-// elseif foo then bar
-// else if foo then bar
-// else baz
-//
 
 #[test] #[should_panic] fn missingthen() {
     let toks = vec!["dennis".to_string()];

@@ -40,25 +40,25 @@ mod privacy_hack {
         ClearFlowControl { control_name: String },
         ClearPrefixedFlowControls { control_prefix: String },
         ClearAllFlowControls {},
-        FadeMixControlTo { control_name: String, fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadePrefixedMixControlsTo { control_prefix: String, fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadeAllMixControlsTo { fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadeAllMixControlsExceptMainTo { fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadeMixControlOut { control_name: String, fade_type: FadeType, fade_length: f32 },
-        FadePrefixedMixControlsOut { control_prefix: String, fade_type: FadeType, fade_length: f32 },
-        FadeAllMixControlsOut { fade_type: FadeType, fade_length: f32 },
-        FadeAllMixControlsExceptMainOut { fade_type: FadeType, fade_length: f32 },
+        FadeMixControlTo { control_name: String, fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadePrefixedMixControlsTo { control_prefix: String, fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadeAllMixControlsTo { fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadeAllMixControlsExceptMainTo { fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadeMixControlOut { control_name: String, fade_type: FadeType, fade_length: PosFloat },
+        FadePrefixedMixControlsOut { control_prefix: String, fade_type: FadeType, fade_length: PosFloat },
+        FadeAllMixControlsOut { fade_type: FadeType, fade_length: PosFloat },
+        FadeAllMixControlsExceptMainOut { fade_type: FadeType, fade_length: PosFloat },
         KillMixControl { control_name: String },
         KillPrefixedMixControls { control_prefix: String },
         KillAllMixControls { },
         KillAllMixControlsExceptMain { },
-        StartFlow { flow_name: String, fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadeFlowTo { flow_name: String, fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadePrefixedFlowsTo { flow_prefix: String, fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadeAllFlowsTo { fade_type: FadeType, target_volume: f32, fade_length: f32 },
-        FadeFlowOut { flow_name: String, fade_type: FadeType, fade_length: f32 },
-        FadePrefixedFlowsOut { flow_prefix: String, fade_type: FadeType, fade_length: f32 },
-        FadeAllFlowsOut { fade_type: FadeType, fade_length: f32 },
+        StartFlow { flow_name: String, fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadeFlowTo { flow_name: String, fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadePrefixedFlowsTo { flow_prefix: String, fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadeAllFlowsTo { fade_type: FadeType, target_volume: PosFloat, fade_length: PosFloat },
+        FadeFlowOut { flow_name: String, fade_type: FadeType, fade_length: PosFloat },
+        FadePrefixedFlowsOut { flow_prefix: String, fade_type: FadeType, fade_length: PosFloat },
+        FadeAllFlowsOut { fade_type: FadeType, fade_length: PosFloat },
         KillFlow { flow_name: String },
         KillPrefixedFlows { flow_prefix: String },
         KillAllFlows { },
@@ -159,7 +159,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn fade_mix_control_to(&mut self, control_name: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn fade_mix_control_to(&mut self, control_name: String, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeMixControlTo { control_name, fade_type, target_volume, fade_length });
     }
     /// Fades all *currently existing* mix controls whose names strictly
@@ -169,7 +169,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn fade_prefixed_mix_controls_to(&mut self, control_prefix: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn fade_prefixed_mix_controls_to(&mut self, control_prefix: String, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadePrefixedMixControlsTo { control_prefix, fade_type, target_volume, fade_length });
     }
     /// Fades all *currently existing* mix controls, *including* `main`, to
@@ -179,7 +179,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn fade_all_mix_controls_to(&mut self, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn fade_all_mix_controls_to(&mut self, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllMixControlsTo { fade_type, target_volume, fade_length });
     }
     /// Fades all *currently existing* mix controls, *except* `main`, to the
@@ -189,7 +189,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn fade_all_mix_controls_except_main_to(&mut self, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn fade_all_mix_controls_except_main_to(&mut self, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllMixControlsExceptMainTo { fade_type, target_volume, fade_length });
     }
     /// Fades a given MixControl to zero volume, using the given fading curve,
@@ -200,7 +200,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
-    fn fade_mix_control_out(&mut self, control_name: String, fade_length: f32, fade_type: FadeType) {
+    fn fade_mix_control_out(&mut self, control_name: String, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeMixControlOut { control_name, fade_type, fade_length });
     }
     /// Fades all *currently existing* mix controls whose names strictly
@@ -213,7 +213,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
-    fn fade_prefixed_mix_controls_out(&mut self, control_prefix: String, fade_length: f32, fade_type: FadeType) {
+    fn fade_prefixed_mix_controls_out(&mut self, control_prefix: String, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadePrefixedMixControlsOut { control_prefix, fade_type, fade_length });
     }
     /// Fades all *currently existing* mix controls, *including* `main`,
@@ -225,7 +225,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
-    fn fade_all_mix_controls_out(&mut self, fade_length: f32, fade_type: FadeType) {
+    fn fade_all_mix_controls_out(&mut self, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllMixControlsOut { fade_type, fade_length });
     }
     /// Fades all *currently existing* mix controls, *except* `main`,
@@ -237,7 +237,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
-    fn fade_all_mix_controls_except_main_out(&mut self, fade_length: f32, fade_type: FadeType) {
+    fn fade_all_mix_controls_except_main_out(&mut self, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllMixControlsExceptMainOut { fade_type, fade_length });
     }
     /// Kills a given MixControl instantly, as if you yanked an audio cable.
@@ -287,7 +287,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn start_flow(&mut self, flow_name: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn start_flow(&mut self, flow_name: String, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::StartFlow { flow_name, fade_type, target_volume, fade_length });
     }
     /// Fades a given flow to the given volume (0.0 to 1.0), using the
@@ -301,7 +301,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn fade_flow_to(&mut self, flow_name: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn fade_flow_to(&mut self, flow_name: String, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeFlowTo { flow_name, fade_type, target_volume, fade_length});
     }
     /// Fades all *currently playing* flows whose names strictly start with
@@ -316,7 +316,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn fade_prefixed_flows_to(&mut self, flow_prefix: String, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn fade_prefixed_flows_to(&mut self, flow_prefix: String, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadePrefixedFlowsTo { flow_prefix, fade_type, target_volume, fade_length});
     }
     /// Fades all *currently playing* flows to the given volume (0.0 to
@@ -331,7 +331,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
-    fn fade_all_flows_to(&mut self, target_volume: f32, fade_length: f32, fade_type: FadeType) {
+    fn fade_all_flows_to(&mut self, target_volume: PosFloat, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllFlowsTo { fade_type, target_volume, fade_length});
     }
     /// Fades a given flow to zero volume, using the given fading curve,
@@ -341,7 +341,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
-    fn fade_flow_out(&mut self, flow_name: String, fade_length: f32, fade_type: FadeType) {
+    fn fade_flow_out(&mut self, flow_name: String, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeFlowOut { flow_name, fade_type, fade_length});
     }
     /// Fades all *currently playing* flows whose names strictly start with
@@ -351,7 +351,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
-    fn fade_prefixed_flows_out(&mut self, flow_prefix: String, fade_length: f32, fade_type: FadeType) {
+    fn fade_prefixed_flows_out(&mut self, flow_prefix: String, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadePrefixedFlowsOut { flow_prefix, fade_type, fade_length });
     }
     /// Fades all *currently playing* flows to zero volume, using the given
@@ -361,7 +361,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
-    fn fade_all_flows_out(&mut self, fade_length: f32, fade_type: FadeType) {
+    fn fade_all_flows_out(&mut self, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllFlowsOut { fade_type, fade_length });
     }
     /// Kills a given flow instantly.
@@ -493,7 +493,7 @@ pub struct Engine {
     soundman: SoundMan,
     flow_loads: HashMap<String, FlowLoadStatus>,
     speaker_layout: SpeakerLayout,
-    sample_rate: f32,
+    sample_rate: PosFloat,
     /// Temporary buffer for mixing
     mix_buf: Vec<MaybeUninit<f32>>,
     active_flow_nodes: Vec<ActiveNode>,
@@ -533,9 +533,9 @@ struct QueuedSound {
     who: PlayingSoundID,
     /// What?
     sound: Arc<Sound>,
-    fade_in: f32,
-    length: Option<f32>,
-    fade_out: f32,
+    fade_in: PosFloat,
+    length: Option<PosFloat>,
+    fade_out: PosFloat,
 }
 
 impl PartialEq for QueuedSound {
@@ -601,7 +601,7 @@ impl Engine {
     pub fn new(
         sound_delegate: Arc<dyn SoundDelegate>,
         speaker_layout: SpeakerLayout,
-        sample_rate: f32,
+        sample_rate: PosFloat,
         num_threads: Option<NonZeroUsize>,
         background_loading: bool
     ) -> Engine {
@@ -619,7 +619,7 @@ impl Engine {
             command_tx, command_rx,
             live_soundtrack: Soundtrack::new(),
             flow_controls: HashMap::new(),
-            mix_controls: [(DEFAULT_CHANNEL.to_string(), Fader::new(1.0))].into_iter().collect(),
+            mix_controls: [(DEFAULT_CHANNEL.to_string(), Fader::new(PosFloat::ONE))].into_iter().collect(),
             flow_volumes: HashMap::new(),
             node_volumes: HashMap::new(),
             flow_control_readout: Arc::new(RwLock::new(HashMap::new())),
@@ -652,7 +652,7 @@ impl Engine {
     /// Returns the `SpeakerLayout` this `Engine` was initialized for.
     pub fn get_speaker_layout(&self) -> SpeakerLayout { self.speaker_layout }
     /// Returns the sample rate this `Engine` was initialized for.
-    pub fn get_sample_rate(&self) -> f32 { self.sample_rate }
+    pub fn get_sample_rate(&self) -> PosFloat { self.sample_rate }
     /// Returns whether this `Engine` was initialized with background loading
     /// turned on or off.
     pub fn is_loading_in_background(&self) -> bool { self.background_loading }
@@ -706,14 +706,14 @@ impl Engine {
                             return false;
                         },
                         Command::Wait(sleep_time) => {
-                            active_node.next_instruction_time = now + (sleep_time * self.sample_rate).floor() as u64;
+                            active_node.next_instruction_time = now + sleep_time.seconds_to_frames(self.sample_rate);
                             break;
                         },
                         Command::PlaySound(sound_name) => {
-                            Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, 0.0, None, 0.0);
+                            Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, PosFloat::ZERO, None, PosFloat::ZERO);
                         },
                         Command::PlaySoundAndWait(sound_name) => {
-                            let sleep_time = Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, 0.0, None, 0.0);
+                            let sleep_time = Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(String::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, PosFloat::ZERO, None, PosFloat::ZERO);
                             active_node.next_instruction_time = now + sleep_time;
                             break;
                         },
@@ -738,7 +738,7 @@ impl Engine {
                             match self.node_volumes.get_mut(&StringAndAHalf(active_node.flow_name.clone(), Some(node_name.clone()))) {
                                 Some(fader) => {
                                     let old_volume = fader.evaluate();
-                                    *fader = Fader::start(FadeType::Linear, old_volume, 0.0, fade_length * self.sample_rate);
+                                    *fader = Fader::start(FadeType::Linear, old_volume, PosFloat::ONE, fade_length.seconds_to_frac_frames(self.sample_rate));
                                 },
                                 None => self.sound_delegate.warning(&format!("missing node: {:?}::{:?}", active_node.flow_name, node_name))
                             }
@@ -963,7 +963,7 @@ impl Engine {
             else { false }
         });
         self.mix_controls.retain(|k, fader| {
-            fader.evaluate() != 0.0 || !self.mix_controls_fading_out.contains(k)
+            fader.evaluate() != PosFloat::ONE || !self.mix_controls_fading_out.contains(k)
         });
     }
     fn replace_soundtrack(&mut self, new_soundtrack: Soundtrack) {
@@ -998,7 +998,7 @@ impl Engine {
     /// this sequence will last.
     fn execute_sequence(
         soundtrack: &Soundtrack,
-        sample_rate: f32,
+        sample_rate: PosFloat,
         now: u64,
         flow_name: &str,
         node_name: Option<&str>,
@@ -1013,9 +1013,9 @@ impl Engine {
             },
             Some(sequence) => {
                 let sequence = sequence.clone();
-                let len = (sequence.length * sample_rate).floor() as u64;
+                let len = sequence.length.seconds_to_frames(sample_rate);
                 for (when, what) in sequence.elements.iter() {
-                    let when = now + ((when * sample_rate).floor() as u64);
+                    let when = now + when.seconds_to_frames(sample_rate);
                     match what {
                         SequenceElement::PlaySequence { sequence } => {
                             assert_ne!(sequence, seqname);
@@ -1036,7 +1036,7 @@ impl Engine {
     /// sound will last.
     fn execute_sound(
         soundtrack: &Soundtrack,
-        sample_rate: f32,
+        sample_rate: PosFloat,
         when: u64,
         flow_name: &str,
         node_name: Option<&str>,
@@ -1044,9 +1044,9 @@ impl Engine {
         sound_delegate: &mut Arc<dyn SoundDelegate>,
         queued_sounds: &mut BinaryHeap<QueuedSound>,
         channel: &str,
-        fade_in: f32,
-        length: Option<f32>,
-        fade_out: f32,
+        fade_in: PosFloat,
+        length: Option<PosFloat>,
+        fade_out: PosFloat,
     ) -> u64 {
         let sound = match soundtrack.sounds.get(sound_name) {
             Some(x) => x.clone(),
@@ -1055,7 +1055,7 @@ impl Engine {
                 return 0
             },
         };
-        let ret = (length.unwrap_or_else(|| sound.end - sound.start) * sample_rate).floor() as u64;
+        let ret = length.unwrap_or_else(|| sound.end.saturating_sub(sound.start)).seconds_to_frames(sample_rate);
         queued_sounds.push(QueuedSound {
             when,
             who: PlayingSoundID {
@@ -1075,7 +1075,7 @@ impl Engine {
 }
 
 impl VolumeGetter<PlayingSoundID> for VolumeGetWrapper<'_, '_> {
-    fn step_faders_by(&mut self, n: f32) {
+    fn step_faders_by(&mut self, n: PosFloat) {
         for (flow_name, fader) in self.flow_volumes.iter_mut() {
             if !self.starting_flows.contains(flow_name) {
                 fader.step_by(n);
@@ -1088,14 +1088,14 @@ impl VolumeGetter<PlayingSoundID> for VolumeGetWrapper<'_, '_> {
             fader.step_by(n);
         }
     }
-    fn get_volume(&mut self, id: &PlayingSoundID, t: f32) -> Option<f32> {
+    fn get_volume(&mut self, id: &PlayingSoundID, t: PosFloat) -> Option<PosFloat> {
         // the seen_* fields will be updated by `is_silent`
         let flow_fader = match self.flow_volumes.get_mut(id.flow_name()) {
             None => return None,
             Some(x) => x,
         };
         let flow_volume = flow_fader.evaluate_t(t);
-        if flow_volume == 0.0 && self.flows_fading_out.contains(id.flow_name()) {
+        if flow_volume == PosFloat::ZERO && self.flows_fading_out.contains(id.flow_name()) {
             return None
         }
         let node_fader = match self.node_volumes.get_mut(&id.flow_and_node_name) {
@@ -1104,9 +1104,9 @@ impl VolumeGetter<PlayingSoundID> for VolumeGetWrapper<'_, '_> {
         };
         let node_volume = node_fader.evaluate();
         // Nodes cannot reach zero volume unless they are being faded out.
-        if node_volume == 0.0 { return None }
+        if node_volume == PosFloat::ZERO { return None }
         let channel_fader = self.mix_controls.get_mut(&id.channel);
-        let channel_volume = channel_fader.as_ref().map(|x| x.evaluate()).unwrap_or(0.0);
+        let channel_volume = channel_fader.as_ref().map(|x| x.evaluate()).unwrap_or(PosFloat::ZERO);
         Some(flow_volume * node_volume * channel_volume)
     }
     fn is_varying(&mut self, id: &PlayingSoundID) -> Option<bool> {
@@ -1115,7 +1115,7 @@ impl VolumeGetter<PlayingSoundID> for VolumeGetWrapper<'_, '_> {
         // stop if the node has stopped
         let node_fader = self.node_volumes.get_mut(&id.flow_and_node_name)?;
         // DO NOT stop if the channel is silenced, UNLESS it's also fading
-        if flow_fader.complete() && flow_fader.evaluate() == 0.0 && self.flows_fading_out.contains(id.flow_name()) {
+        if flow_fader.complete() && flow_fader.evaluate() == PosFloat::ONE && self.flows_fading_out.contains(id.flow_name()) {
             return None
         }
         if !self.seen_flows.contains(id.flow_name()) {
@@ -1200,7 +1200,7 @@ impl EngineCommandIssuer for Engine {
             FadeMixControlTo { control_name, fade_type, target_volume, fade_length } => {
                 self.perform_deferred_kill();
                 self.mix_controls_fading_out.remove(&control_name);
-                let old_volume = self.mix_controls.get(&control_name).map(Fader::evaluate).unwrap_or(0.0);
+                let old_volume = self.mix_controls.get(&control_name).map(Fader::evaluate).unwrap_or(PosFloat::ZERO);
                 self.mix_controls.insert(control_name, Fader::start(fade_type, old_volume, target_volume, fade_length * self.sample_rate));
             },
             FadePrefixedMixControlsTo { control_prefix, fade_type, target_volume, fade_length } => {
@@ -1208,7 +1208,7 @@ impl EngineCommandIssuer for Engine {
                 for (control_name, fader) in self.mix_controls.iter_mut() {
                     if control_name.starts_with(&control_prefix) {
                         self.mix_controls_fading_out.remove(control_name);
-                        *fader = Fader::start(fade_type, fader.evaluate(), target_volume, fade_length * self.sample_rate);
+                        *fader = Fader::start(fade_type, fader.evaluate(), target_volume, fade_length.seconds_to_frac_frames(self.sample_rate));
                     }
                 }
             },
@@ -1232,7 +1232,7 @@ impl EngineCommandIssuer for Engine {
                 self.perform_deferred_kill();
                 if let Some(fader) = self.mix_controls.get_mut(&control_name) {
                     let old_volume = fader.evaluate();
-                    *fader = Fader::start(fade_type, old_volume, 0.0, fade_length * self.sample_rate);
+                    *fader = Fader::start(fade_type, old_volume, PosFloat::ZERO, fade_length * self.sample_rate);
                     self.mix_controls_fading_out.insert(control_name);
                 }
             },
@@ -1240,7 +1240,7 @@ impl EngineCommandIssuer for Engine {
                 self.perform_deferred_kill();
                 for (control_name, fader) in self.mix_controls.iter_mut() {
                     if control_name.starts_with(&control_prefix) {
-                        *fader = Fader::start(fade_type, fader.evaluate(), 0.0, fade_length * self.sample_rate);
+                        *fader = Fader::start(fade_type, fader.evaluate(), PosFloat::ZERO, fade_length * self.sample_rate);
                         self.mix_controls_fading_out.insert(control_name.to_string());
                     }
                 }
@@ -1248,7 +1248,7 @@ impl EngineCommandIssuer for Engine {
             FadeAllMixControlsOut { fade_type, fade_length } => {
                 self.perform_deferred_kill();
                 for (control_name, fader) in self.mix_controls.iter_mut() {
-                    *fader = Fader::start(fade_type, fader.evaluate(), 0.0, fade_length * self.sample_rate);
+                    *fader = Fader::start(fade_type, fader.evaluate(), PosFloat::ZERO, fade_length * self.sample_rate);
                     self.mix_controls_fading_out.insert(control_name.to_string());
                 }
             },
@@ -1256,7 +1256,7 @@ impl EngineCommandIssuer for Engine {
                 self.perform_deferred_kill();
                 for (control_name, fader) in self.mix_controls.iter_mut() {
                     if control_name != DEFAULT_CHANNEL {
-                        *fader = Fader::start(fade_type, fader.evaluate(), 0.0, fade_length * self.sample_rate);
+                        *fader = Fader::start(fade_type, fader.evaluate(), PosFloat::ZERO, fade_length * self.sample_rate);
                         self.mix_controls_fading_out.insert(control_name.to_string());
                     }
                 }
@@ -1314,14 +1314,14 @@ impl EngineCommandIssuer for Engine {
                     load_status.maybe_load(&self.live_soundtrack, &mut self.soundman);
                     // we will check if it's loaded the next time the handle turns
                     self.starting_flows.insert(flow_name.clone());
-                    self.node_volumes.insert(StringAndAHalf(flow_name.clone(), None), Fader::new(1.0));
-                    self.flow_volumes.insert(flow_name, Fader::start(fade_type, 0.0, target_volume, fade_length * self.sample_rate));
+                    self.node_volumes.insert(StringAndAHalf(flow_name.clone(), None), Fader::new(PosFloat::ONE));
+                    self.flow_volumes.insert(flow_name, Fader::start(fade_type, PosFloat::ZERO, target_volume, fade_length * self.sample_rate));
                 }
             },
             FadeFlowTo { flow_name, fade_type, target_volume, fade_length } => {
                 self.perform_deferred_kill();
                 self.flows_fading_out.remove(&flow_name);
-                let old_volume = self.flow_volumes.get(&flow_name).map(Fader::evaluate).unwrap_or(0.0);
+                let old_volume = self.flow_volumes.get(&flow_name).map(Fader::evaluate).unwrap_or(PosFloat::ZERO);
                 self.flow_volumes.insert(flow_name, Fader::start(fade_type, old_volume, target_volume, fade_length * self.sample_rate));
             },
             FadePrefixedFlowsTo { flow_prefix, fade_type, target_volume, fade_length } => {
@@ -1344,7 +1344,7 @@ impl EngineCommandIssuer for Engine {
                 self.perform_deferred_kill();
                 if let Some(fader) = self.flow_volumes.get_mut(&flow_name) {
                     let old_volume = fader.evaluate();
-                    *fader = Fader::start(fade_type, old_volume, 0.0, fade_length * self.sample_rate);
+                    *fader = Fader::start(fade_type, old_volume, PosFloat::ZERO, fade_length * self.sample_rate);
                     self.flows_fading_out.insert(flow_name);
                 }
             },
@@ -1352,7 +1352,7 @@ impl EngineCommandIssuer for Engine {
                 self.perform_deferred_kill();
                 for (flow_name, fader) in self.flow_volumes.iter_mut() {
                     if flow_name.starts_with(&flow_prefix) {
-                        *fader = Fader::start(fade_type, fader.evaluate(), 0.0, fade_length * self.sample_rate);
+                        *fader = Fader::start(fade_type, fader.evaluate(), PosFloat::ZERO, fade_length * self.sample_rate);
                         self.flows_fading_out.insert(flow_name.to_string());
                     }
                 }
@@ -1360,7 +1360,7 @@ impl EngineCommandIssuer for Engine {
             FadeAllFlowsOut { fade_type, fade_length } => {
                 self.perform_deferred_kill();
                 for (flow_name, fader) in self.flow_volumes.iter_mut() {
-                    *fader = Fader::start(fade_type, fader.evaluate(), 0.0, fade_length * self.sample_rate);
+                    *fader = Fader::start(fade_type, fader.evaluate(), PosFloat::ZERO, fade_length * self.sample_rate);
                     self.flows_fading_out.insert(flow_name.to_string());
                 }
             },

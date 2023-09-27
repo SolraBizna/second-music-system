@@ -1,6 +1,6 @@
 use std::mem::MaybeUninit;
 
-use crate::Sample;
+use super::{PosFloat, Sample};
 
 /// Describes the format of sound samples stored in a file. SMS uses floats
 /// internally, so floats are the preferred format. Using other datatypes will
@@ -62,7 +62,7 @@ impl SpeakerLayout {
 /// samples as needed. SMS will either cache this or stream it directly...
 /// because of the latter case, mind your thread safety!
 pub struct FormattedSoundStream {
-    pub sample_rate: f32,
+    pub sample_rate: PosFloat,
     pub speaker_layout: SpeakerLayout,
     pub reader: FormattedSoundReader,
 }
@@ -78,20 +78,6 @@ impl FormattedSoundStream {
     /// PANICS if the stream cannot be cloned cheaply.
     pub fn attempt_clone(&self) -> FormattedSoundStream {
         self.reader.attempt_clone(self.sample_rate, self.speaker_layout)
-    }
-}
-
-/// This is an object that SMS will hang onto, and will call upon to open sound
-/// files and issue warnings. It must be thread safe.
-pub trait SoundDelegate: Send + Sync {
-    /// Attempt to open an sound file with the given name. If it doesn't exist,
-    /// an IO error occurs, you can't identify the format, or whatever, you
-    /// should display or log an error message using an application-specific
-    /// mechanism, then return `None`.
-    fn open_file(&self, name: &str) -> Option<FormattedSoundStream>;
-    /// Present and/or log a warning in some application-specific way.
-    fn warning(&self, message: &str) {
-        eprintln!("SMS warning: {}", message);
     }
 }
 
@@ -185,7 +171,7 @@ pub trait SoundReader<T: Sample>: Send {
     ///
     /// Sample rate and speaker layout are provided in case you do not keep
     /// track of your own sample rate and speaker layout internally.
-    fn attempt_clone(&self, _sample_rate: f32, _speaker_layout: SpeakerLayout) -> FormattedSoundStream {
+    fn attempt_clone(&self, _sample_rate: PosFloat, _speaker_layout: SpeakerLayout) -> FormattedSoundStream {
         if self.can_be_cloned() {
             panic!("PROGRAM BUG: this SoundReader claims it can be cloned, but does not implement `attempt_clone`!")
         } else {
@@ -236,7 +222,7 @@ impl FormattedSoundReader {
     }
     /// Attempt to clone the stream, if the stream can be cloned cheaply.
     /// PANICS if the stream cannot be cloned cheaply.
-    pub fn attempt_clone(&self, sample_rate: f32, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
+    pub fn attempt_clone(&self, sample_rate: PosFloat, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
         match self {
             FormattedSoundReader::U8(x) => x.attempt_clone(sample_rate, speaker_layout),
             FormattedSoundReader::U16(x) => x.attempt_clone(sample_rate, speaker_layout),

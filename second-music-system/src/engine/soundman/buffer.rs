@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 
 #[derive(Debug, Clone)]
 struct Format {
-    sample_rate: f32,
+    sample_rate: PosFloat,
     speaker_layout: SpeakerLayout,
 }
 
@@ -70,7 +70,7 @@ impl WeakFormattedVec {
 impl Format {
     fn default() -> Format {
         Format {
-            sample_rate: 44100.0,
+            sample_rate: PosFloat::new_clamped(44100.0),
             speaker_layout: SpeakerLayout::Mono,
         }
     }
@@ -122,7 +122,7 @@ pub struct BufferMan {
 }
 
 impl SoundManImpl for BufferMan {
-    fn load(&mut self, sound: &str, _start: f32, loading_rt: &Option<Arc<Runtime>>) {
+    fn load(&mut self, sound: &str, _start: PosFloat, loading_rt: &Option<Arc<Runtime>>) {
         if let Some(ent) = self.sounds.get_mut(sound) {
             ent.check_loading(&self.delegate, sound);
             match ent {
@@ -162,7 +162,7 @@ impl SoundManImpl for BufferMan {
             },
         }
     }
-    fn unload(&mut self, sound: &str, _start: f32) -> bool {
+    fn unload(&mut self, sound: &str, _start: PosFloat) -> bool {
         match self.sounds.get_mut(sound) {
             None | Some(CachedSound::UnloadedSound { .. }) => {
                 self.delegate.warning(&format!("unbalanced unload of sound {:?} (THIS IS A BUG IN SMS!)", sound));
@@ -198,7 +198,7 @@ impl SoundManImpl for BufferMan {
     fn unload_all(&mut self) {
         self.sounds.clear();
     }
-    fn is_ready(&mut self, sound: &str, _start: f32) -> bool {
+    fn is_ready(&mut self, sound: &str, _start: PosFloat) -> bool {
         if let Some(x) = self.sounds.get_mut(sound) {
             x.check_loading(&self.delegate, sound);
             if let CachedSound::LoadedSound { .. } = x {
@@ -210,8 +210,8 @@ impl SoundManImpl for BufferMan {
     fn get_sound(
         &mut self,
         sound: &str,
-        start: f32,
-        end: f32
+        start: PosFloat,
+        end: PosFloat
     ) -> Option<FormattedSoundStream> {
         self.sounds.get_mut(sound).and_then(|s| {
             s.check_loading(&self.delegate, sound);
@@ -250,9 +250,9 @@ struct BufferStream<T: Sample> {
     num_channels: usize,
 }
 
-fn new_buffer_stream(format: &Format, vec: FormattedVec, start: f32, end: f32) -> FormattedSoundStream {
-    let cursor = (start.seconds_to_index(format.sample_rate) * format.speaker_layout.get_num_channels() as u64).min(vec.len() as u64) as usize;
-    let end = (end.seconds_to_index(format.sample_rate) * format.speaker_layout.get_num_channels() as u64).min(vec.len() as u64) as usize;
+fn new_buffer_stream(format: &Format, vec: FormattedVec, start: PosFloat, end: PosFloat) -> FormattedSoundStream {
+    let cursor = start.seconds_to_samples(format.sample_rate, format.speaker_layout).min(vec.len() as u64) as usize;
+    let end = end.seconds_to_samples(format.sample_rate, format.speaker_layout).min(vec.len() as u64) as usize;
     let sample_rate = format.sample_rate;
     let speaker_layout = format.speaker_layout;
     let reader = match vec {
@@ -319,7 +319,7 @@ impl<T: Sample> SoundReader<T> for BufferStream<T> {
     fn seek(&mut self, _in_pos: u64) -> Option<u64> {
         panic!("SMS logic error: seeking a BufferStream");
     }
-    fn attempt_clone(&self, sample_rate: f32, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
+    fn attempt_clone(&self, sample_rate: PosFloat, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
         FormattedSoundStream {
             sample_rate,
             speaker_layout,

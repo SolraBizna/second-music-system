@@ -74,6 +74,15 @@ fn output_error(text: &str, error_out: *mut *mut c_char, error_out_len: *mut siz
     }
 }
 
+/// Return a PosFloat-clamped float. If clamping was needed, print a warning
+/// to stderr. (Ew.)
+fn positive(x: f32) -> PosFloat {
+    PosFloat::new(x).unwrap_or_else(|e| {
+        eprintln!("THIS IS A BUG IN THE PROGRAM USING SMS: {e}");
+        PosFloat::ZERO
+    })
+}
+
 fn speaker_layout_from_int(int: c_int) -> Option<SpeakerLayout> {
     Some(match int {
         SMS_SPEAKER_LAYOUT_MONO => SpeakerLayout::Mono,

@@ -210,7 +210,7 @@ extern "C" fn [<$c_target _ fade_mix_control_to>](
     let target = target!(target, function_name!());
     let control_name = input(control_name, control_name_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_mix_control_to(control_name, target_volume, fade_length, fade_type);
+    target.fade_mix_control_to(control_name, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -224,7 +224,7 @@ extern "C" fn [<$c_target _ fade_mix_control_to_cstr>](
     let target = target!(target, function_name!());
     let control_name = input_cstr(control_name).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_mix_control_to(control_name, target_volume, fade_length, fade_type);
+    target.fade_mix_control_to(control_name, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -239,7 +239,7 @@ extern "C" fn [<$c_target _ fade_prefixed_mix_controls_to>](
     let target = target!(target, function_name!());
     let control_prefix = input(control_prefix, control_prefix_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_mix_controls_to(control_prefix, target_volume, fade_length, fade_type);
+    target.fade_prefixed_mix_controls_to(control_prefix, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -253,7 +253,7 @@ extern "C" fn [<$c_target _ fade_prefixed_mix_controls_to_cstr>](
     let target = target!(target, function_name!());
     let control_prefix = input_cstr(control_prefix).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_mix_controls_to(control_prefix, target_volume, fade_length, fade_type);
+    target.fade_prefixed_mix_controls_to(control_prefix, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -265,7 +265,7 @@ extern "C" fn [<$c_target _ fade_all_mix_controls_to>](
 ) {
     let target = target!(target, function_name!());
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_all_mix_controls_to(target_volume, fade_length, fade_type);
+    target.fade_all_mix_controls_to(positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -277,7 +277,7 @@ extern "C" fn [<$c_target _ fade_all_mix_controls_except_main_to>](
 ) {
     let target = target!(target, function_name!());
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_all_mix_controls_except_main_to(target_volume, fade_length, fade_type);
+    target.fade_all_mix_controls_except_main_to(positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -291,7 +291,7 @@ extern "C" fn [<$c_target _ fade_mix_control_out>](
     let target = target!(target, function_name!());
     let control_name = input(control_name, control_name_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_mix_control_out(control_name, fade_length, fade_type);
+    target.fade_mix_control_out(control_name, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -304,7 +304,7 @@ extern "C" fn [<$c_target _ fade_mix_control_out_cstr>](
     let target = target!(target, function_name!());
     let control_name = input_cstr(control_name).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_mix_control_out(control_name, fade_length, fade_type);
+    target.fade_mix_control_out(control_name, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -318,7 +318,7 @@ extern "C" fn [<$c_target _ fade_prefixed_mix_controls_out>](
     let target = target!(target, function_name!());
     let control_prefix = input(control_prefix, control_prefix_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_mix_controls_out(control_prefix, fade_length, fade_type);
+    target.fade_prefixed_mix_controls_out(control_prefix, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -331,7 +331,7 @@ extern "C" fn [<$c_target _ fade_prefixed_mix_controls_out_cstr>](
     let target = target!(target, function_name!());
     let control_prefix = input_cstr(control_prefix).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_mix_controls_out(control_prefix, fade_length, fade_type);
+    target.fade_prefixed_mix_controls_out(control_prefix, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -342,7 +342,7 @@ extern "C" fn [<$c_target _ fade_all_mix_controls_out>](
 ) {
     let target = target!(target, function_name!());
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_all_mix_controls_out(fade_length, fade_type);
+    target.fade_all_mix_controls_out(positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -353,7 +353,7 @@ extern "C" fn [<$c_target _ fade_all_mix_controls_except_main_out>](
 ) {
     let target = target!(target, function_name!());
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_all_mix_controls_except_main_out(fade_length, fade_type);
+    target.fade_all_mix_controls_except_main_out(positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -428,7 +428,7 @@ extern "C" fn [<$c_target _ start_flow>](
     let target = target!(target, function_name!());
     let flow_name = input(flow_name, flow_name_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.start_flow(flow_name, target_volume, fade_length, fade_type);
+    target.start_flow(flow_name, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -442,7 +442,7 @@ extern "C" fn [<$c_target _ start_flow_cstr>](
     let target = target!(target, function_name!());
     let flow_name = input_cstr(flow_name).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.start_flow(flow_name, target_volume, fade_length, fade_type);
+    target.start_flow(flow_name, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -457,7 +457,7 @@ extern "C" fn [<$c_target _ fade_flow_to>](
     let target = target!(target, function_name!());
     let flow_name = input(flow_name, flow_name_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_flow_to(flow_name, target_volume, fade_length, fade_type);
+    target.fade_flow_to(flow_name, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -471,7 +471,7 @@ extern "C" fn [<$c_target _ fade_flow_to_cstr>](
     let target = target!(target, function_name!());
     let flow_name = input_cstr(flow_name).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_flow_to(flow_name, target_volume, fade_length, fade_type);
+    target.fade_flow_to(flow_name, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -486,7 +486,7 @@ extern "C" fn [<$c_target _ fade_prefixed_flows_to>](
     let target = target!(target, function_name!());
     let flow_prefix = input(flow_prefix, flow_prefix_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_flows_to(flow_prefix, target_volume, fade_length, fade_type);
+    target.fade_prefixed_flows_to(flow_prefix, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -500,7 +500,7 @@ extern "C" fn [<$c_target _ fade_prefixed_flows_to_cstr>](
     let target = target!(target, function_name!());
     let flow_prefix = input_cstr(flow_prefix).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_flows_to(flow_prefix, target_volume, fade_length, fade_type);
+    target.fade_prefixed_flows_to(flow_prefix, positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -512,7 +512,7 @@ extern "C" fn [<$c_target _ fade_all_flows_to>](
 ) {
     let target = target!(target, function_name!());
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_all_flows_to(target_volume, fade_length, fade_type);
+    target.fade_all_flows_to(positive(target_volume), positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -526,7 +526,7 @@ extern "C" fn [<$c_target _ fade_flow_out>](
     let target = target!(target, function_name!());
     let flow_name = input(flow_name, flow_name_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_flow_out(flow_name, fade_length, fade_type);
+    target.fade_flow_out(flow_name, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -539,7 +539,7 @@ extern "C" fn [<$c_target _ fade_flow_out_cstr>](
     let target = target!(target, function_name!());
     let flow_name = input_cstr(flow_name).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_flow_out(flow_name, fade_length, fade_type);
+    target.fade_flow_out(flow_name, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -553,7 +553,7 @@ extern "C" fn [<$c_target _ fade_prefixed_flows_out>](
     let target = target!(target, function_name!());
     let flow_prefix = input(flow_prefix, flow_prefix_len).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_flows_out(flow_prefix, fade_length, fade_type);
+    target.fade_prefixed_flows_out(flow_prefix, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -566,7 +566,7 @@ extern "C" fn [<$c_target _ fade_prefixed_flows_out_cstr>](
     let target = target!(target, function_name!());
     let flow_prefix = input_cstr(flow_prefix).unwrap();
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_prefixed_flows_out(flow_prefix, fade_length, fade_type);
+    target.fade_prefixed_flows_out(flow_prefix, positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]
@@ -577,7 +577,7 @@ extern "C" fn [<$c_target _ fade_all_flows_out>](
 ) {
     let target = target!(target, function_name!());
     let fade_type = fade_type!(fade_type, function_name!());
-    target.fade_all_flows_out(fade_length, fade_type);
+    target.fade_all_flows_out(positive(fade_length), fade_type);
 }
 
 #[no_mangle] #[named]

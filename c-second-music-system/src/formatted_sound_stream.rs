@@ -64,11 +64,11 @@ impl<T: Sample> SoundReader<T> for ForeignSoundReader<T> {
     fn can_be_cloned(&self) -> bool {
         self.clone_handler.is_some()
     }
-    fn attempt_clone(&self, sample_rate: f32, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
+    fn attempt_clone(&self, sample_rate: PosFloat, speaker_layout: SpeakerLayout) -> FormattedSoundStream {
         match self.clone_handler {
             None => panic!("attempted to clone a non-cloneable SoundReader"),
             Some(x) => {
-                let ret = unsafe { x(self.callback_data, sample_rate, speaker_layout_to_int(speaker_layout)) };
+                let ret = unsafe { x(self.callback_data, *sample_rate, speaker_layout_to_int(speaker_layout)) };
                 if ret.is_null() {
                     panic!("PROGRAM BUG: clone_handler cannot return NULL. If your stream is not cloneable, use NULL as your clone_handler instead.");
                 }
@@ -120,7 +120,7 @@ unsafe extern "C" fn SMS_FormattedSoundStream_new(
     }
     Box::into_raw(Box::new(FormattedSoundStream {
         speaker_layout,
-        sample_rate,
+        sample_rate: positive(sample_rate),
         reader: match format {
             SMS_SOUND_FORMAT_UNSIGNED_8 => reader!(U8, u8),
             SMS_SOUND_FORMAT_UNSIGNED_16 => reader!(U16, u16),

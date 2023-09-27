@@ -1,3 +1,5 @@
+use crate::PosFloat;
+
 /// Specifies what kind of curve to use in a fade.
 /// 
 /// Logarithmic fades will have (roughly) the same perceived volume change per
@@ -21,17 +23,6 @@ pub enum FadeType {
     Exponential,
 }
 
-// TODO: these functions are useful, but no longer needed
-/*
-fn volts2db(amp: f32) -> f32 {
-    20.0 * amp.log(10.0)
-}
-
-fn db2volts(db: f32) -> f32 {
-    10.0f32.powf(db / 20.0)
-}
-*/
-
 #[derive(Debug,Clone,Copy)]
 pub(crate) enum FadeCurve {
     Logarithmic { pos: f32, step: f32 },
@@ -52,12 +43,12 @@ const SILENT_LOG: f32 = -11.1;
 const SILENT_EXP: f32 = 1.0000152589055;
 
 impl FadeCurve {
-    pub fn from(typ: FadeType, from: f32, to: f32, length: f32) -> FadeCurve {
+    pub fn from(typ: FadeType, from: PosFloat, to: PosFloat, length: PosFloat) -> FadeCurve {
         match typ {
             FadeType::Exponential => {
                 let from = from.exp().max(SILENT_EXP);
                 let to = to.exp().max(SILENT_EXP);
-                let step = (to - from) / (length + 1.0);
+                let step = (to - from) / (*length + 1.0);
                 FadeCurve::Exponential {
                     pos: from,
                     step,
@@ -66,33 +57,33 @@ impl FadeCurve {
             FadeType::Logarithmic => {
                 let from = from.ln().max(SILENT_LOG);
                 let to = to.ln().max(SILENT_LOG);
-                let step = (to - from) / (length + 1.0);
+                let step = (to - from) / (*length + 1.0);
                 FadeCurve::Logarithmic {
                     pos: from,
                     step,
                 }
             },
             FadeType::Linear => {
-                let step = (to - from) / (length + 1.0);
-                FadeCurve::Linear { pos: from, step }
+                let step = (*to - *from) / (*length + 1.0);
+                FadeCurve::Linear { pos: *from, step }
             },
         }
     }
     /// Evaluate the current state of the fader.
-    fn evaluate(&self) -> f32 {
-        match self {
+    fn evaluate(&self) -> PosFloat {
+        PosFloat::new_clamped(match self {
             Self::Exponential { pos, .. } => { pos.ln() },
             Self::Logarithmic { pos, .. } => { pos.exp() },
             Self::Linear { pos, .. } => { *pos },
-        }
+        })
     }
     /// Evaluate the state of the fader t steps into the future.
-    fn evaluate_t(&self, t: f32) -> f32 {
-        match self {
-            Self::Exponential { pos, step } => { (pos + step * t).ln() },
-            Self::Logarithmic { pos, step } => { (pos + step * t).exp() },
-            Self::Linear { pos, step } => { *pos + step * t },
-        }
+    fn evaluate_t(&self, t: PosFloat) -> PosFloat {
+        PosFloat::new_clamped(match self {
+            Self::Exponential { pos, step } => { (pos + step * *t).ln() },
+            Self::Logarithmic { pos, step } => { (pos + step * *t).exp() },
+            Self::Linear { pos, step } => { *pos + step * *t },
+        })
     }
     /// Step by a single sample frame
     fn step_by_one(&mut self) {
@@ -103,11 +94,11 @@ impl FadeCurve {
         }
     }
     /// Step by a given number of sample frames
-    fn step_by(&mut self, count: f32) {
+    fn step_by(&mut self, count: PosFloat) {
         match self {
             Self::Logarithmic { pos, step } |
             Self::Exponential { pos, step } |
-            Self::Linear { pos, step } => { *pos += *step * count },
+            Self::Linear { pos, step } => { *pos += *step * *count },
         }
     }
 }
@@ -116,17 +107,17 @@ impl FadeCurve {
 #[derive(Debug,Clone)]
 pub struct Fader {
     curve: FadeCurve,
-    to: f32,
-    length: f32, // given in SAMPLE FRAMES
-    pos: f32, // given in SAMPLE FRAMES
+    to: PosFloat,
+    length: PosFloat, // given in SAMPLE FRAMES
+    pos: PosFloat, // given in SAMPLE FRAMES
 }
 
 impl Fader {
     /// Blank fader. Just has volume at the given level.
-    pub fn new(volume: f32) -> Fader {
+    pub fn new(volume: PosFloat) -> Fader {
         Fader {
-            curve: FadeCurve::Linear { pos: volume, step: 0.0 },
-            to: volume, length: 1.0, pos: 2.0,
+            curve: FadeCurve::Linear { pos: *volume, step: 0.0 },
+            to: volume, length: PosFloat::ZERO, pos: PosFloat::ONE,
         }
     }
     /// Start a fade.
@@ -136,18 +127,16 @@ impl Fader {
     /// - `to`: The ending volume of the fade.
     /// - `length`: How long, in **sample frames**, the fade should take to
     ///   complete.
-    pub fn start(typ: FadeType, from: f32, to: f32, length: f32) -> Fader {
-        debug_assert!(length.is_finite());
-        debug_assert!(length >= 0.0);
+    pub fn start(typ: FadeType, from: PosFloat, to: PosFloat, length: PosFloat) -> Fader {
         Fader {
             curve: FadeCurve::from(typ, from, to, length), to,
-            length, pos: 0.0,
+            length: length, pos: PosFloat::ZERO,
         }
     }
     /// As `start`, but returns `None` if the given length is infinite, zero,
     /// or negative.
-    pub fn maybe_start(typ: FadeType, from: f32, to: f32, length: f32) -> Option<Fader> {
-        if length.is_finite() && length > 0.0 {
+    pub fn maybe_start(typ: FadeType, from: PosFloat, to: PosFloat, length: PosFloat) -> Option<Fader> {
+        if length > PosFloat::ZERO {
             Some(Fader::start(typ, from, to, length))
         } else { None }
     }
@@ -156,7 +145,7 @@ impl Fader {
         self.pos >= self.length
     }
     /// Evaluate the current volume.
-    pub fn evaluate(&self) -> f32 {
+    pub fn evaluate(&self) -> PosFloat {
         if self.complete() {
             self.to
         }
@@ -165,7 +154,7 @@ impl Fader {
         }
     }
     /// Evaluate the volume `t` steps into the future.
-    pub fn evaluate_t(&self, t: f32) -> f32 {
+    pub fn evaluate_t(&self, t: PosFloat) -> PosFloat {
         let new_pos = self.pos + t;
         if new_pos >= self.length {
             self.to
@@ -178,21 +167,21 @@ impl Fader {
     pub fn step_by_one(&mut self) {
         if !self.complete() {
             self.curve.step_by_one();
-            self.pos += 1.0;
+            self.pos = self.pos + PosFloat::ONE;
         }
     }
     /// Step by a give number of sample frames
-    pub fn step_by(&mut self, count: f32) {
+    pub fn step_by(&mut self, count: PosFloat) {
         if !self.complete() {
             self.curve.step_by(count);
-            self.pos += count;
+            self.pos = self.pos + count;
         }
     }
 }
 
 impl Iterator for Fader {
-    type Item = f32;
-    fn next(&mut self) -> Option<f32> {
+    type Item = PosFloat;
+    fn next(&mut self) -> Option<PosFloat> {
         if self.complete() { None }
         else {
             let ret = self.evaluate();
@@ -201,11 +190,11 @@ impl Iterator for Fader {
         }
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = (self.length.ceil() - self.pos) as usize;
+        let size = (self.length.ceil() - *self.pos) as usize;
         (size, Some(size))
     }
     fn count(self) -> usize {
-        let size = (self.length.ceil() - self.pos) as usize;
+        let size = (self.length.ceil() - *self.pos) as usize;
         size
     }
 }

@@ -194,7 +194,7 @@ make_downmixer!(Surround71ToSurround51(fl, fr, c, lfe, rl, rr, sl, sr) -> {
     rr = (rr+sr*0.5) * (1.0 / 1.5);
 });
 
-pub(crate) fn new_channel_adapter(in_stream: Box<dyn SoundReader<f32>>, sample_rate: f32, in_layout: SpeakerLayout, out_layout: SpeakerLayout) -> Box<dyn SoundReader<f32>> {
+pub(crate) fn new_channel_adapter(in_stream: Box<dyn SoundReader<f32>>, sample_rate: PosFloat, in_layout: SpeakerLayout, out_layout: SpeakerLayout) -> Box<dyn SoundReader<f32>> {
     match (in_layout, out_layout) {
         // Mono source
         (SpeakerLayout::Mono, SpeakerLayout::Mono) => in_stream,
@@ -269,8 +269,6 @@ pub(crate) fn new_channel_adapter(in_stream: Box<dyn SoundReader<f32>>, sample_r
     }
 }
 
-// TODO: implement skip
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -295,7 +293,7 @@ mod test {
     fn uninit_ub() {
         let src_data: Vec<f32> = (0 .. 500).map(|x| (x as f32).sin()).collect();
         let src_reader = Box::new(FixedSource { src_data, pos: 0 });
-        let mut adapted = new_channel_adapter(src_reader, 456.0, SpeakerLayout::Mono, SpeakerLayout::Stereo);
+        let mut adapted = new_channel_adapter(src_reader, PosFloat::new_clamped(456.0), SpeakerLayout::Mono, SpeakerLayout::Stereo);
         let mut bawk = [MaybeUninit::uninit(); 1000];
         assert_eq!(adapted.read(&mut bawk[..]), bawk.len());
         let bawk: [f32; 1000] = unsafe { std::mem::transmute(bawk) };

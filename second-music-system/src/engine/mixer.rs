@@ -3,26 +3,26 @@ use std::{
     mem::MaybeUninit,
 };
 
-use crate::SoundReader;
+use crate::{PosFloat, SoundReader};
 
 /// Something that has opinions on how loud a particular mixer channel should
 /// be.
 pub(crate) trait VolumeGetter<ID: Debug> {
     /// Called after every output buffer. You should step all your faders by
     /// the given number of sample frames.
-    fn step_faders_by(&mut self, #[allow(unused)] n: f32) {}
+    fn step_faders_by(&mut self, #[allow(unused)] n: PosFloat) {}
     /// If the sound should stop playing, returns `None`. If the sound should
     /// play at a specific volume, returns `Some(volume)` instead. `t` is the
     /// number of steps in the future to get the value for, where `0.0` is the
     /// first sample frame of a buffer, `1.0` is the second, etc.
     ///
-    /// `Some(0.0)` is a perfectly valid volume, and we still need to consume
+    /// `Some(ZERO)` is a perfectly valid volume, and we still need to consume
     /// audio in that case.
     /// 
     /// We assume that if `Some(0.0)` is returned, any further calls (in, say,
     /// a tight loop) will not result in a non-zero return. If you allow phase
     /// inversion (which... why?) then this assumption will not hold.
-    fn get_volume(&mut self, identity: &ID, t: f32) -> Option<f32>;
+    fn get_volume(&mut self, identity: &ID, t: PosFloat) -> Option<PosFloat>;
     /// Return `None` if the sound should stop, `Some(false)` if the sound
     /// is currently playing at a fixed volume, or `Some(true)` if the sound
     /// is currently playing at a varying volume.
@@ -35,10 +35,10 @@ pub(crate) trait VolumeGetter<ID: Debug> {
 }
 
 impl<'a, T: VolumeGetter<ID>, ID: Debug> VolumeGetter<ID> for &'a mut T {
-    fn step_faders_by(&mut self, n: f32) {
+    fn step_faders_by(&mut self, n: PosFloat) {
         (*self).step_faders_by(n)
     }
-    fn get_volume(&mut self, identity: &ID, t: f32) -> Option<f32> {
+    fn get_volume(&mut self, identity: &ID, t: PosFloat) -> Option<PosFloat> {
         (*self).get_volume(identity, t)
     }
     fn is_varying(&mut self, identity: &ID) -> Option<bool> {
@@ -90,7 +90,7 @@ impl<ID: Debug> Mixer<ID> {
                     // Time to mix!
                     let out_frames = out.len() / samples_per_frame;
                     // (use the volume at the halfway point)
-                    let t = (out_frames as f32) * 0.5;
+                    let t = PosFloat::from(out_frames) * PosFloat::HALF;
                     // Cache the volume given by the VolumeGetter, and use it
                     // for the whole buffer. We can do this because the volume
                     // is not currently varying.
@@ -101,13 +101,13 @@ impl<ID: Debug> Mixer<ID> {
                             return false
                         },
                         Some(volume) => {
-                            if volume == 0.0 {
+                            if volume == PosFloat::ZERO {
                                 if !stream.skip_precise(out.len() as u64, mix_buf) {
                                     return false
                                 }
                                 out.len() as usize
                             }
-                            else if volume == 1.0 {
+                            else if volume == PosFloat::ZERO {
                                 // easy mode
                                 let len = stream.read(&mut mix_buf[..out.len()]);
                                 assert!(len % samples_per_frame == 0);
@@ -122,7 +122,7 @@ impl<ID: Debug> Mixer<ID> {
                                 assert!(len % samples_per_frame == 0);
                                 for x in 0 .. len {
                                     out[x] += unsafe { *mix_buf[x].assume_init_ref() }
-                                        * volume;
+                                        * *volume;
                                 }
                                 len
                             }
@@ -134,24 +134,24 @@ impl<ID: Debug> Mixer<ID> {
                     // Time to bix!
                     // We will have to call GetVolume every sample frame,
                     // because the volume is currently varying.
-                    let mut time_accumulator = 0.5;
+                    let mut time_accumulator = PosFloat::HALF;
                     let len = stream.read(&mut mix_buf[..out.len()]);
                     assert!(len % samples_per_frame == 0);
                     for x in (0 .. len).step_by(samples_per_frame) {
                         let volume = volume_getter.get_volume(identity, time_accumulator);
-                        time_accumulator += 1.0;
+                        time_accumulator = time_accumulator + PosFloat::ONE;
                         match volume {
                             // we're done here
                             None => {
                                 return false
                             },
                             Some(volume) => {
-                                if volume == 0.0 {
+                                if volume == PosFloat::ZERO {
                                     // we have nothing to mix, and we assume
                                     // we won't for the rest of the buffer
                                     break
                                 }
-                                else if volume == 1.0 {
+                                else if volume == PosFloat::ONE {
                                     // easy mode
                                     for x in x .. x + samples_per_frame {
                                         out[x] += unsafe { *mix_buf[x].assume_init_ref() };
@@ -161,7 +161,7 @@ impl<ID: Debug> Mixer<ID> {
                                     // hard mode
                                     for x in x .. x + samples_per_frame {
                                         out[x] += unsafe { *mix_buf[x].assume_init_ref() }
-                                            * volume;
+                                            * *volume;
                                     }
                                 }
                             },
@@ -201,7 +201,7 @@ impl<ID: Debug> Mixer<ID> {
         {
             if let Some(mut target) = MIX_CHANNELS.try_lock() {
                 let report = self.channels.iter().map(|x| {
-                    let volume = volume_getter.get_volume(&x.identity, 0.0);
+                    let volume = volume_getter.get_volume(&x.identity, PosFloat::ZERO);
                     let blah = format!("{:?}", x.identity);
                     (volume, blah)
                 }).collect();
@@ -209,7 +209,7 @@ impl<ID: Debug> Mixer<ID> {
             }
         }
         let out_frames = out.len() / self.samples_per_frame;
-        volume_getter.step_faders_by(out_frames as f32);
+        volume_getter.step_faders_by(out_frames.into());
         self.next_output_sample_frame_number = self.next_output_sample_frame_number.wrapping_add(out_frames as u64);
     }
     /// Similar to `mix` with empty buffers. Use this if you desperately need
@@ -228,4 +228,4 @@ impl<ID: Debug> Mixer<ID> {
 }
 
 #[cfg(feature="debug-channels")]
-pub static MIX_CHANNELS: parking_lot::Mutex<Vec<(Option<f32>, String)>> = parking_lot::Mutex::new(vec![]);
+pub static MIX_CHANNELS: parking_lot::Mutex<Vec<(Option<PosFloat>, String)>> = parking_lot::Mutex::new(vec![]);

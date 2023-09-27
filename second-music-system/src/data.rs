@@ -105,8 +105,8 @@ pub(crate) struct Sound {
     // unique within a soundtrack
     pub(crate) name: String,
     pub(crate) path: String,
-    pub(crate) start: f32,
-    pub(crate) end: f32,
+    pub(crate) start: PosFloat,
+    pub(crate) end: PosFloat,
     /// If true, the underlying audio file should be streamed, rather than
     /// cached. (If some sounds request that it be streamed and others request
     /// that it be cached, whether it is streamed or cached is undefined.)
@@ -120,13 +120,13 @@ pub(crate) enum SequenceElement {
         channel: String, // default is `main`
         /// How many seconds of fade-in between starting and becoming full
         /// volume
-        fade_in: f32,
+        fade_in: PosFloat,
         /// How long, including the fade in, that it should play at full volume
-        length: Option<f32>,
+        length: Option<PosFloat>,
         /// How many seconds of fade-out to have after `length`
         /// (whereas in the format, this is how long before `end` that the fade
         /// will *start*)
-        fade_out: f32,
+        fade_out: PosFloat,
     },
     PlaySequence {
         sequence: String
@@ -137,8 +137,8 @@ pub(crate) enum SequenceElement {
 pub(crate) struct Sequence {
     // unique within a soundtrack
     pub(crate) name: String,
-    pub(crate) length: f32,
-    pub(crate) elements: Vec<(f32, SequenceElement)>, // TODO make sure these are sorted
+    pub(crate) length: PosFloat,
+    pub(crate) elements: Vec<(PosFloat, SequenceElement)>, // TODO make sure these are sorted
 }
 
 impl Sequence {
@@ -164,7 +164,7 @@ pub(crate) enum Command {
     /// Conclude the current node without running any more commands.
     Done,
     /// Wait a certain number of seconds.
-    Wait(f32),
+    Wait(PosFloat),
     /// Start a Sound playing (even if another instance of that sound is
     /// already playing)
     PlaySound(String),
@@ -187,7 +187,7 @@ pub(crate) enum Command {
     /// As `RestartNode(the starting node)`
     RestartFlow,
     /// Cause another Node to fade out and go away (iff already playing)
-    FadeNodeOut(String, f32),
+    FadeNodeOut(String, PosFloat),
     /// Change a FlowControl to a new value.
     Set(String, Vec<PredicateOp>),
     /// If/else chain. **INTERMEDIATE PARSING STEP ONLY, MUST NOT OCCUR IN THE

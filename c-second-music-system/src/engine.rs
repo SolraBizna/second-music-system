@@ -24,7 +24,7 @@ extern "C" fn SMS_Engine_new(
     let background_loading = background_loading != 0;
     let delegate = unsafe { delegate.as_ref().unwrap() }.clone();
     Box::into_raw(Box::new(Engine::new(
-        delegate, speaker_layout, sample_rate, num_threads, background_loading
+        delegate, speaker_layout, positive(sample_rate), num_threads, background_loading
     )))
 }
 
@@ -66,7 +66,7 @@ unsafe extern "C" fn SMS_Engine_get_sample_rate(engine: *mut Engine) -> f32 {
         panic!("SMS_Engine_get_speaker_layout: engine cannot be NULL!");
     }
     let engine = unsafe { engine.as_ref().unwrap() };
-    engine.get_sample_rate()
+    *engine.get_sample_rate()
 }
 
 #[no_mangle]

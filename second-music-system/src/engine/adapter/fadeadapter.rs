@@ -27,20 +27,20 @@ struct FadeAdapter<T: Sample> {
 impl<T: Sample> FadeAdapter<T> {
     fn new(
         sound: &Sound,
-        fade_in: f32,
-        how_long_to_play_before_fade: Option<f32>,
-        fade_out: f32,
-        sample_rate: f32,
+        fade_in: PosFloat,
+        how_long_to_play_before_fade: Option<PosFloat>,
+        fade_out: PosFloat,
+        sample_rate: PosFloat,
         speaker_layout: SpeakerLayout,
         source_stream: Box<dyn SoundReader<T>>,
     ) -> Box<dyn SoundReader<f32>> {
         let num_channels = speaker_layout.get_num_channels() as u64;
-        let samples_in_sound = ((sound.end - sound.start) * sample_rate).ceil() as u64 * num_channels;
+        let samples_in_sound = ((sound.end.saturating_sub(sound.start)) * sample_rate).ceil() as u64 * num_channels;
         let samples_till_fade_out;
         let samples_left;
         if let Some(how_long_to_play_before_fade) = how_long_to_play_before_fade {
             samples_till_fade_out = (how_long_to_play_before_fade * sample_rate).floor() as u64 * num_channels;
-            samples_left = (((how_long_to_play_before_fade + fade_out.max(0.0)) * sample_rate).ceil() as u64 * num_channels)
+            samples_left = (((how_long_to_play_before_fade + fade_out.max(PosFloat::ZERO)) * sample_rate).ceil() as u64 * num_channels)
                 .min(samples_in_sound);
         }
         else {
@@ -52,8 +52,8 @@ impl<T: Sample> FadeAdapter<T> {
             speaker_layout,
             samples_till_fade_out,
             samples_left,
-            fade_in: Fader::maybe_start(FadeType::Linear, 0.0, 1.0, fade_in),
-            fade_out: Fader::maybe_start(FadeType::Linear, 1.0, 0.0, fade_out),
+            fade_in: Fader::maybe_start(FadeType::Linear, PosFloat::ZERO, PosFloat::ONE, fade_in),
+            fade_out: Fader::maybe_start(FadeType::Linear, PosFloat::ONE, PosFloat::ZERO, fade_out),
             buf: vec![MaybeUninit::uninit(); 64],
         })
     }
@@ -96,12 +96,12 @@ impl<T: Sample> SoundReader<f32> for FadeAdapter<T> {
         if let Some(fade_in) = self.fade_in.as_mut() {
             // TODO: factor this logic into a method because DRY
             let mut out_n = 0;
-            let mut in_n = 0;
+            let mut in_n: usize = 0;
             while out_n < amount_read {
-                let eval = fade_in.evaluate_t(in_n as f32);
+                let eval = fade_in.evaluate_t(in_n.into());
                 in_n += 1;
                 for _ in 0 .. self.speaker_layout.get_num_channels() {
-                    out[out_n] *= eval;
+                    out[out_n] *= *eval;
                     out_n += 1;
                 }
             }
@@ -109,18 +109,18 @@ impl<T: Sample> SoundReader<f32> for FadeAdapter<T> {
                 self.fade_in = None;
             }
             else {
-                fade_in.step_by(amount_read as f32);
+                fade_in.step_by(amount_read.into());
             }
         }
         if self.samples_till_fade_out == 0 {
             if let Some(fade_out) = self.fade_out.as_mut() {
                 let mut out_n = 0;
-                let mut in_n = 0;
+                let mut in_n: usize = 0;
                 while out_n < amount_read {
-                    let eval = fade_out.evaluate_t(in_n as f32);
+                    let eval = fade_out.evaluate_t(in_n.into());
                     in_n += 1;
                     for _ in 0 .. self.speaker_layout.get_num_channels() {
-                        out[out_n] *= eval;
+                        out[out_n] *= *eval;
                         out_n += 1;
                     }
                 }
@@ -129,7 +129,7 @@ impl<T: Sample> SoundReader<f32> for FadeAdapter<T> {
                     self.samples_left = 0;
                 }
                 else {
-                    fade_out.step_by(amount_read as f32);
+                    fade_out.step_by(amount_read.into());
                 }
             }
         }
@@ -183,7 +183,7 @@ impl<T: Sample> SoundReader<f32> for FadeAdapter<T> {
 
 pub(crate) fn new_fade_adapter(
     sound: &Sound, stream: FormattedSoundStream,
-    fade_in: f32, length: Option<f32>, fade_out: f32,
+    fade_in: PosFloat, length: Option<PosFloat>, fade_out: PosFloat,
 ) -> Box<dyn SoundReader<f32>> {
     let FormattedSoundStream { sample_rate, speaker_layout, reader }
         = stream;

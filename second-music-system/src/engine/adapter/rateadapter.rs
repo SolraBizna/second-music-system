@@ -26,7 +26,7 @@ struct RateAdapter {
     num_channels: u32,
 }
 
-pub(crate) fn new_rate_adapter(delegate: &Arc<dyn SoundDelegate>, in_stream: Box<dyn SoundReader<f32>>, num_channels: u32, in_sample_rate: f32, out_sample_rate: f32) -> Box<dyn SoundReader<f32>> {
+pub(crate) fn new_rate_adapter(delegate: &Arc<dyn SoundDelegate>, in_stream: Box<dyn SoundReader<f32>>, num_channels: u32, in_sample_rate: PosFloat, out_sample_rate: PosFloat) -> Box<dyn SoundReader<f32>> {
     let io_spec = IOSpec::new(Datatype::Float32I, Datatype::Float32I);
     let quality_spec = QualitySpec::new(&QualityRecipe::Medium, QualityFlags::HI_PREC_CLOCK);
     let runtime_spec = RuntimeSpec::new(1); // no multithreading
@@ -34,7 +34,7 @@ pub(crate) fn new_rate_adapter(delegate: &Arc<dyn SoundDelegate>, in_stream: Box
     // We send this Soxr instance between threads. This is *probably* safe to
     // do as long as we're only using one thread for resampling (as selected
     // above). EVERYTHING WILL BREAK IF YOU CHANGE THAT!
-    let soxr = match Soxr::create(in_sample_rate as f64, out_sample_rate as f64, num_channels, Some(&io_spec), Some(&quality_spec), Some(&runtime_spec)) {
+    let soxr = match Soxr::create((*in_sample_rate) as f64, (*out_sample_rate) as f64, num_channels, Some(&io_spec), Some(&quality_spec), Some(&runtime_spec)) {
         Ok(x) => x,
         Err(x) => {
             delegate.warning(&format!("Unable to initialize resampler for {} -> {} Hz: {}", in_sample_rate, out_sample_rate, x));
@@ -43,12 +43,12 @@ pub(crate) fn new_rate_adapter(delegate: &Arc<dyn SoundDelegate>, in_stream: Box
     };
     let (buffer_numerator, buffer_denominator);
     if in_sample_rate < out_sample_rate {
-        buffer_numerator = (in_sample_rate * 32.0 / out_sample_rate).ceil().max(1.0) as u8;
+        buffer_numerator = (*in_sample_rate * 32.0 / *out_sample_rate).ceil().max(1.0) as u8;
         buffer_denominator = 32;
     }
     else {
         buffer_numerator = 255;
-        buffer_denominator = (out_sample_rate * 255.0 / in_sample_rate).ceil().max(1.0) as u8;
+        buffer_denominator = (*out_sample_rate * 255.0 / *in_sample_rate).ceil().max(1.0) as u8;
     }
     Box::new(RateAdapter {
         inner: in_stream,

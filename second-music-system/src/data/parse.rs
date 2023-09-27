@@ -15,7 +15,7 @@ mod test;
 #[derive(Debug,PartialEq)]
 struct TimebaseStage {
     one_based: bool,
-    multiplier: f32,
+    multiplier: PosFloat,
 }
 
 #[derive(Debug,PartialEq)]
@@ -26,7 +26,7 @@ struct Timebase {
 static DEFAULT_TIMEBASE: Lazy<Timebase> = Lazy::new(|| {
     Timebase {
         stages: vec![
-            TimebaseStage { one_based: false, multiplier: 1.0 },
+            TimebaseStage { one_based: false, multiplier: PosFloat::ONE },
         ],
     }
 });
@@ -39,29 +39,29 @@ enum TimebaseSuffix {
 
 impl TimebaseSuffix {
     /// How many seconds per tick, given `x` ticks per `self`?
-    fn num_per(&self, x: f32) -> f32 {
+    fn num_per(&self, x: PosFloat) -> PosFloat {
         use TimebaseSuffix::*;
         match self {
-            Seconds => 1.0 / x,
-            Milliseconds => 1.0 / (x * 1000.0),
-            Microseconds => 1.0 / (x * 1000000.0),
-            Nanoseconds => 1.0 / (x * 1000000000.0),
-            Minutes => 60.0 / x,
-            Hours => 3600.0 / x,
-            Days => 86400.0 / x,
+            Seconds => PosFloat::ONE / x,
+            Milliseconds => PosFloat::ONE / (x * PosFloat::THOUSAND),
+            Microseconds => PosFloat::ONE / (x * PosFloat::MILLION),
+            Nanoseconds => PosFloat::ONE / (x * PosFloat::BILLION),
+            Minutes => PosFloat::SECONDS_PER_MINUTE / x,
+            Hours => PosFloat::SECONDS_PER_HOUR / x,
+            Days => PosFloat::SECONDS_PER_DAY / x,
         }
     }
     /// How many seconds per tick, given that each tick is `x` `self`s?
-    fn num_times(&self, x: f32) -> f32 {
+    fn num_times(&self, x: PosFloat) -> PosFloat {
         use TimebaseSuffix::*;
         match self {
             Seconds => x,
-            Milliseconds => x / 1000.0,
-            Microseconds => x / 1000000.0,
-            Nanoseconds => x / 1000000000.0,
-            Minutes => 60.0 * x,
-            Hours => 3600.0 * x,
-            Days => 86400.0 * x,
+            Milliseconds => x / PosFloat::THOUSAND,
+            Microseconds => x / PosFloat::MILLION,
+            Nanoseconds => x / PosFloat::BILLION,
+            Minutes => PosFloat::SECONDS_PER_MINUTE * x,
+            Hours => PosFloat::SECONDS_PER_HOUR * x,
+            Days => PosFloat::SECONDS_PER_DAY * x,
         }
     }
 }
@@ -95,7 +95,7 @@ enum TimeSpec {
 }
 
 impl Timebase {
-    fn parse_stage(mut source: &str) -> Result<(bool, f32, TimeSpec), String> {
+    fn parse_stage(mut source: &str) -> Result<(bool, PosFloat, TimeSpec), String> {
         let one_based = if source.starts_with("@") {
             source = &source[1..];
             true
@@ -126,14 +126,14 @@ impl Timebase {
             },
             None => TimeSpec::Basic,
         };
-        let number = match source.parse::<f32>() {
+        let number = match source.parse::<PosFloat>() {
             Ok(x) => x,
             Err(_) => return Err(format!("Invalid number")),
         };
         Ok((one_based, number, timespec))
     }
     fn parse_source(source: &[String]) -> Result<Timebase, String> {
-        let mut stages: Vec<(bool, f32)> = Vec::with_capacity(source.len());
+        let mut stages: Vec<(bool, PosFloat)> = Vec::with_capacity(source.len());
         let mut basis = None;
         for (n, stage) in source.iter().enumerate() {
             match Timebase::parse_stage(stage) {
@@ -173,7 +173,7 @@ impl Timebase {
                 }
             }
             for x in ret.iter_mut() {
-                x.multiplier *= multiplier;
+                x.multiplier = x.multiplier * multiplier;
             }
             ret.push(TimebaseStage { one_based, multiplier });
             if n == basis_index { break }
@@ -185,16 +185,16 @@ impl Timebase {
         }
         Ok(Timebase { stages: ret })
     }
-    fn eval(&self, mut specifier: &str, be_one_based: bool) -> Result<f32, String> {
+    fn eval(&self, mut specifier: &str, be_one_based: bool) -> Result<PosFloat, String> {
         // TODO: it's more numerically stable if we sum from smallest to
         // largest... but if your Segment is long enough for that to matter
         // you should rethink your life choices
-        let mut ret = 0.0;
+        let mut ret = PosFloat::ZERO;
         for (i, stage) in self.stages.iter().enumerate() {
             let last = i+1 == self.stages.len();
             let mut raw = if last {
                 // Parse the rest of the specifier as a f32
-                match specifier.parse::<f32>() {
+                match specifier.parse::<PosFloat>() {
                     Ok(x) => x,
                     Err(_) => {
                         return Err(format!("Invalid timecode"))
@@ -207,16 +207,16 @@ impl Timebase {
                 let interesting = &specifier[..period_pos];
                 specifier = &specifier[(period_pos+1).min(specifier.len())..];
                 match interesting.parse::<i32>() {
-                    Ok(x) => x as f32,
+                    Ok(x) => PosFloat::new(x as f32)?,
                     Err(_) => {
                         return Err(format!("Invalid timecode"))
                     },
                 }
             };
             if be_one_based && stage.one_based {
-                raw -= 1.0;
+                raw.saturating_sub(PosFloat::ONE);
             }
-            ret += raw * stage.multiplier;
+            ret = ret + raw * stage.multiplier;
         }
         Ok(ret)
     }
@@ -289,7 +289,7 @@ impl<'a> TimebaseCollection<'a> {
             x => x,
         }
     }
-    fn parse_time(&self, items: &[String]) -> Result<f32, String> {
+    fn parse_time(&self, items: &[String]) -> Result<PosFloat, String> {
         let (timebase, time) = match items.len() {
             2 => {
                 let timebase = match self.get_active_timebase() {
@@ -314,7 +314,7 @@ impl<'a> TimebaseCollection<'a> {
             Err(x) => Err(x),
         }
     }
-    fn parse_time_node(&self, node: &DinNode) -> Result<f32, String> {
+    fn parse_time_node(&self, node: &DinNode) -> Result<PosFloat, String> {
         if !node.children.is_empty() {
             return Err(format!("{} elements must have no children (check indentation)", node.items[0]))
         }
@@ -391,7 +391,7 @@ impl Sound {
                     return Err(format!("line {}: this element should have a single item", child.lineno))
                 }
                 else if let Ok(value) = child.items[1].parse() {
-                    offset = Some(value);
+                    offset = Some(PosFloat::new(value)?);
                 }
                 else {
                     return Err(format!("line {}: that doesn't appear to be a valid number", child.lineno))
@@ -401,10 +401,10 @@ impl Sound {
                 return Err(format!("line {}: unknown sound element {:?}", child.lineno, child.items[0]))
             }
         }
-        let offset = offset.unwrap_or(0.0);
+        let offset = offset.unwrap_or(PosFloat::ZERO);
         let start = match data.get("start") {
             Some(x) => *x + offset,
-            None => 0.0,
+            None => PosFloat::ZERO,
         };
         let end = match (data.get("end"), data.get("length")) {
             (Some(_), Some(_)) => {
@@ -472,6 +472,7 @@ impl Sequence {
             Some(x) => x,
             None => return Err(format!("line {}: \"length\" must be specified", node.lineno))
         };
+        elements.sort_by(|a,b| a.0.cmp(&b.0));
         Ok(Sequence {
             name, length, elements,
         })
@@ -487,7 +488,7 @@ const SEQUENCE_ELEMENT_TIME_KEYWORDS: &[&str] = &[
 ];
 
 impl SequenceElement {
-    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection) -> Result<(f32, SequenceElement), String> {
+    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection) -> Result<(PosFloat, SequenceElement), String> {
         assert_eq!(node.items[0], "play");
         // TODO: Better (combinatorial?) error messages.
         if node.items.len() == 1 {
@@ -505,6 +506,7 @@ impl SequenceElement {
             return Err(format!("line {}: \"play\" must only include the element type and the name of the element on its own line.", node.lineno))
         }
         let mut timebases = timebases.make_child();
+        // TODO: remove explicit type
         let mut data = HashMap::new();
         let mut channel = None;
         for child in node.children.iter() {
@@ -556,11 +558,11 @@ impl SequenceElement {
         };
         let start = match data.get("at") {
             Some(x) => *x,
-            None => 0.0,
+            None => PosFloat::ZERO,
         };
         let fade_in = match data.get("fade_in") {
             Some(x) => *x,
-            None => 0.0,
+            None => PosFloat::ZERO,
         };
         let length = match (data.get("for"), data.get("until")) {
             (Some(_), Some(_)) => {
@@ -573,12 +575,12 @@ impl SequenceElement {
                 Some(*length)
             },
             (None, Some(end)) => {
-                Some(end - start)
+                Some(end.saturating_sub(start))
             },
         };
         let (length, fade_out) = match data.get("fade_out") {
-            Some(fade_out) => (length.map(|x| x - fade_out), *fade_out),
-            None => (length, 0.0),
+            Some(fade_out) => (length.map(|x| x.saturating_sub(*fade_out)), *fade_out),
+            None => (length, PosFloat::ZERO),
         };
         match element_type {
             "sound" => Ok((start, SequenceElement::PlaySound { sound: name.clone(), channel, fade_in, length, fade_out })),
@@ -655,8 +657,7 @@ fn parse_flow_command_tokens(tokens: &[String], timebases: &TimebaseCollection) 
                         return Err(format!("next element after \"starting\" must be \"node\""))
                     }
                     if tokens.len() != 3 {
-                        // TODO(nemo): more descriptive error
-                        return Err(format!("must be exactly \"restart starting node\""))
+                        return Err(format!("nothing is allowed after \"restart starting node\""))
                     }
                     Ok(Some(Command::RestartFlow))
                 },
