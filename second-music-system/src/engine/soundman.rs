@@ -5,17 +5,17 @@ use std::{
 
 use super::*;
 
-use tokio::runtime::Runtime;
+use switchyard::{Switchyard, threads::{ThreadAllocationInput, one_to_one, single_thread}};
 
 mod buffer;
 pub use buffer::*;
 mod stream;
 pub use stream::*;
 
-pub(crate) trait SoundManImpl {
+pub(crate) trait SoundManSubtype<Runtime: TaskRuntime> {
     /// Load the given sound. Recursive; call `load` N times, and you have to
     /// call `unload` N times before it will take effect.
-    fn load(&mut self, sound: &str, start: PosFloat, loading_rt: &Option<Arc<Runtime>>);
+    fn load(&mut self, sound: &str, start: PosFloat, loading_rt: &Arc<Runtime>);
     /// Unload the given sound. The sound will actually stick around if it's
     /// currently being referenced by a decoder. Return true if the sound's
     /// live reference count becomes zero.
@@ -31,10 +31,10 @@ pub(crate) trait SoundManImpl {
     /// returns the decoder state for the given sound, and will (if background
     /// loading is in effect) queue up another instance of that decoder to be
     /// ready for next time.
-    /// 
+    ///
     /// Returns `None` if the sound isn't loaded yet, or (sometimes) if it
     /// hasn't been loaded with the given `start`.
-    /// 
+    ///
     /// You *must* have previously requested a load of this sound with the
     /// given `start`.
     fn get_sound(
@@ -53,50 +53,38 @@ struct SoundInfo {
     sound_type: SoundType,
 }
 
-pub(crate) struct SoundMan {
-    bufferman: BufferMan,
-    streamman: StreamMan,
+pub(crate) struct SoundMan<Runtime: TaskRuntime> {
+    bufferman: BufferMan<Runtime>,
+    streamman: StreamMan<Runtime>,
     delegate: Arc<dyn SoundDelegate>,
     sound_infos: HashMap<String, SoundInfo>,
-    loading_rt: Option<Arc<Runtime>>,
+    loading_rt: Arc<Runtime>,
 }
 
-impl SoundMan {
+pub(crate) trait GenericSoundMan: 'static + Send {
+    fn load(&mut self, sound: &Sound);
+    fn unload(&mut self, sound: &Sound);
+    fn is_ready(&mut self, sound: &Sound) -> bool;
+    fn get_sound(&mut self, sound: &Sound) -> Option<FormattedSoundStream>;
+}
+
+impl<Runtime: TaskRuntime> SoundMan<Runtime> {
     pub fn new(
         delegate: Arc<dyn SoundDelegate>,
-        num_threads: usize,
-        background_loading: bool
-    ) -> SoundMan {
-        let loading_rt = if background_loading {
-            use tokio::runtime::Builder;
-            let runtime = if num_threads > 1 {
-                Builder::new_multi_thread()
-                    .worker_threads(num_threads)
-                    .thread_name("SMS decoder")
-                    .thread_stack_size(1 * 1024 * 1024)
-                    .enable_time()
-                    .build()
-                    .expect("unable to create multithreaded Tokio runtime")
-            }
-            else {
-                Builder::new_current_thread()
-                    .enable_time()
-                    .build()
-                    .expect("unable to create unithreaded Tokio runtime")
-            };
-            let runtime_ref = Arc::new(runtime);
-            spin_off_tokio(&runtime_ref);
-            Some(runtime_ref)
-        } else { None };
+        loading_rt: Arc<Runtime>,
+    ) -> SoundMan<Runtime> {
         SoundMan {
             bufferman: BufferMan::new(delegate.clone()),
-            streamman: StreamMan::new(delegate.clone(), loading_rt.as_ref()),
+            streamman: StreamMan::new(delegate.clone(), &loading_rt),
             delegate,
             sound_infos: HashMap::new(),
             loading_rt,
         }
     }
-    pub fn load(&mut self, sound: &Sound) {
+}
+
+impl<Runtime: TaskRuntime> GenericSoundMan for SoundMan<Runtime> {
+    fn load(&mut self, sound: &Sound) {
         if let Some(info) = self.sound_infos.get_mut(&sound.path) {
             let target_type = if sound.stream { SoundType::Streamed } else { SoundType::Buffered };
             if target_type != info.sound_type {
@@ -131,7 +119,7 @@ impl SoundMan {
             });
         }
     }
-    pub fn unload(&mut self, sound: &Sound) {
+    fn unload(&mut self, sound: &Sound) {
         match self.sound_infos.get_mut(&sound.path) {
             None => {
                 self.delegate.warning(&format!("unbalanced unload of sound file {:?} (THIS IS A BUG IN SMS)", sound.path));
@@ -153,12 +141,7 @@ impl SoundMan {
             },
         }
     }
-    pub fn _unload_all(&mut self) {
-        self.sound_infos.clear();
-        self.bufferman.unload_all();
-        self.streamman.unload_all();
-    }
-    pub fn is_ready(&mut self, sound: &Sound) -> bool {
+    fn is_ready(&mut self, sound: &Sound) -> bool {
         match self.sound_infos.get(&sound.path) {
             None => false, // not being loaded, therefore not ready
             Some(SoundInfo { sound_type: SoundType::Buffered, .. }) => {
@@ -169,7 +152,7 @@ impl SoundMan {
             },
         }
     }
-    pub fn get_sound(&mut self, sound: &Sound) -> Option<FormattedSoundStream> {
+    fn get_sound(&mut self, sound: &Sound) -> Option<FormattedSoundStream> {
         match self.sound_infos.get(&sound.path) {
             None => None, // not being loaded, therefore not ready
             Some(SoundInfo { sound_type: SoundType::Buffered, .. }) => {
@@ -180,18 +163,4 @@ impl SoundMan {
             },
         }
     }
-}
-
-fn spin_off_tokio(runtime: &Arc<Runtime>) {
-    let runtime = runtime.clone();
-    std::thread::Builder::new()
-        .name(format!("SMS decoder runtime"))
-        .spawn(move || {
-            runtime.block_on(async {
-                loop {
-                    tokio::time::sleep(Duration::new(456, 0)).await;
-                }    
-            });
-        })
-        .expect("Unable to spawn background decoding master thread");
 }

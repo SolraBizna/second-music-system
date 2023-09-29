@@ -10,8 +10,9 @@ extern "C" fn SMS_Engine_new(
     delegate: *mut Arc<dyn SoundDelegate>,
     speaker_layout: c_int,
     sample_rate: f32,
-    num_threads: c_int,
     background_loading: c_int,
+    num_threads: c_int,
+    affinity: c_int,
 ) -> *mut Engine {
     if delegate.is_null() {
         panic!("SMS_Engine_new: delegate cannot be NULL!");
@@ -19,13 +20,24 @@ extern "C" fn SMS_Engine_new(
     let speaker_layout = speaker_layout_from_int(speaker_layout)
         .expect("SMS_Engine_new: speaker_layout was not a valid \
                  SMS_SPEAKER_LAYOUT_* constant");
-    let num_threads = if num_threads <= 0 { None }
-    else { Some(NonZeroUsize::new(num_threads as usize).unwrap()) };
     let background_loading = background_loading != 0;
     let delegate = unsafe { delegate.as_ref().unwrap() }.clone();
-    Box::into_raw(Box::new(Engine::new(
-        delegate, speaker_layout, positive(sample_rate), num_threads, background_loading
-    )))
+    if background_loading {
+        Box::into_raw(Box::new(Engine::new(
+            delegate,
+            speaker_layout,
+            positive(sample_rate),
+            NonZeroUsize::new(num_threads.clamp(0, c_int::MAX) as usize),
+            affinity as usize,
+        )))
+    } else {
+        Box::into_raw(Box::new(Engine::new_with_runtime(
+            delegate,
+            speaker_layout,
+            positive(sample_rate),
+            Arc::new(ForegroundTaskRuntime),
+        )))
+    }
 }
 
 #[no_mangle]
@@ -67,15 +79,6 @@ unsafe extern "C" fn SMS_Engine_get_sample_rate(engine: *mut Engine) -> f32 {
     }
     let engine = unsafe { engine.as_ref().unwrap() };
     *engine.get_sample_rate()
-}
-
-#[no_mangle]
-unsafe extern "C" fn SMS_Engine_is_loading_in_background(engine: *mut Engine) -> c_int {
-    if engine.is_null() {
-        panic!("SMS_Engine_is_loading_in_background: engine cannot be NULL!");
-    }
-    let engine = unsafe { engine.as_ref().unwrap() };
-    if engine.is_loading_in_background() { 1 } else { 0 }
 }
 
 #[no_mangle]

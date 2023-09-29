@@ -1,8 +1,8 @@
 use super::*;
 
-use std::sync::{Arc, Weak};
+use std::{sync::{Arc, Weak}, marker::PhantomData};
 
-use tokio::sync::oneshot;
+use crossbeam::channel;
 
 #[derive(Debug, Clone)]
 struct Format {
@@ -49,7 +49,7 @@ impl FormattedVec {
             FormattedVec::I16(x) => WeakFormattedVec::I16(Arc::downgrade(x)),
             FormattedVec::F32(x) => WeakFormattedVec::F32(Arc::downgrade(x)),
         }
-    } 
+    }
 }
 
 impl WeakFormattedVec {
@@ -79,7 +79,7 @@ impl Format {
 enum CachedSound {
     /// A sound that hasn't been loaded yet, but whose loading has been
     /// requested.
-    LoadingSound { rx: oneshot::Receiver<(Format, FormattedVec)>, load_count: u32 },
+    LoadingSound { rx: channel::Receiver<(Format, FormattedVec)>, load_count: u32 },
     /// A sound that has been loaded, and is currently being actively cached.
     LoadedSound { format: Format, vec: FormattedVec, load_count: u32 },
     /// A sound that was previously loaded, but whose load count has gone to
@@ -102,7 +102,7 @@ impl CachedSound {
                     // because it would immediately be freed)
                     *self = CachedSound::UnloadedSound { format: Format::default(), vec: WeakFormattedVec::default() }
                 },
-                Err(oneshot::error::TryRecvError::Empty) => {
+                Err(channel::TryRecvError::Empty) => {
                     // nothing to do right now
                 }
                 _ => {
@@ -116,13 +116,14 @@ impl CachedSound {
 
 /// Manages cached *sounds*. We load them completely, ahead of time. We use a
 /// lot of memory, but our returned streams are very simple to decode.
-pub struct BufferMan {
+pub struct BufferMan<Runtime: TaskRuntime> {
     delegate: Arc<dyn SoundDelegate>,
     sounds: HashMap<String, CachedSound>,
+    _marker: PhantomData<Runtime>,
 }
 
-impl SoundManImpl for BufferMan {
-    fn load(&mut self, sound: &str, _start: PosFloat, loading_rt: &Option<Arc<Runtime>>) {
+impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for BufferMan<Runtime> {
+    fn load(&mut self, sound: &str, _start: PosFloat, loading_rt: &Arc<Runtime>) {
         if let Some(ent) = self.sounds.get_mut(sound) {
             ent.check_loading(&self.delegate, sound);
             match ent {
@@ -140,27 +141,18 @@ impl SoundManImpl for BufferMan {
         }
         // if we got here, the sound has never been loaded, or it was unloaded
         // and collected
-        match loading_rt.as_ref() {
-            Some(loading_rt) => {
-                let (result_tx, result_rx) = oneshot::channel();
-                let delegate = self.delegate.clone();
-                let sound = sound.to_string();
-                let sound_clone = sound.clone();
-                loading_rt.spawn(async move {
-                    let _ = result_tx.send(load_whole_sound(&delegate, &sound_clone));
-                });
-                self.sounds.insert(sound.to_string(),
-                    CachedSound::LoadingSound {
-                        load_count: 1,
-                        rx: result_rx,
-                });
-            },
-            None => {
-                let (format, vec) = load_whole_sound(&self.delegate, sound);
-                // if we got here, background loading isn't enabled, or wasn't possible
-                self.sounds.insert(sound.to_string(), CachedSound::LoadedSound { load_count: 1, format, vec });
-            },
-        }
+        let (result_tx, result_rx) = channel::bounded(1);
+        let delegate = self.delegate.clone();
+        let sound = sound.to_string();
+        let sound_clone = sound.clone();
+        loading_rt.spawn_task(TaskType::BufferLoad, async move {
+            let _ = result_tx.send(load_whole_sound(&delegate, &sound_clone));
+        });
+        self.sounds.insert(sound.to_string(),
+            CachedSound::LoadingSound {
+                load_count: 1,
+                rx: result_rx,
+        });
     }
     fn unload(&mut self, sound: &str, _start: PosFloat) -> bool {
         match self.sounds.get_mut(sound) {
@@ -233,11 +225,12 @@ impl SoundManImpl for BufferMan {
     }
 }
 
-impl BufferMan {
-    pub fn new(delegate: Arc<dyn SoundDelegate>) -> BufferMan {
+impl<Runtime: TaskRuntime> BufferMan<Runtime> {
+    pub fn new(delegate: Arc<dyn SoundDelegate>) -> BufferMan<Runtime> {
         BufferMan {
             delegate,
             sounds: HashMap::new(),
+            _marker: PhantomData,
         }
     }
 }

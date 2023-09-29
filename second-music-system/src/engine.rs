@@ -81,7 +81,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Starts a new transaction. Commands that are issued will be batched
     /// together into one transaction, and delivered and processed all at once
     /// when the transaction is complete.
-    /// 
+    ///
     /// - `length`: Your best guess as to the number of commands that will be
     ///   sent during this transaction. This is an optimization hint only.
     fn begin_transaction(&mut self, length: Option<usize>) -> Transaction<'_, Self> {
@@ -107,7 +107,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Requests that the given flow be precached for playback. The engine
     /// will attempt to load/preroll all requested sounds and streams in the
     /// background. Use TODO to determine when the loading is complete.
-    /// 
+    ///
     /// This is *not* recursive. If you call `precache` twice, then call
     /// `unprecache` once, the flow will no longer be precached.
     fn precache(&mut self, flow_name: String) {
@@ -117,11 +117,11 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// playback. This will lead the relevant sounds and streams to be purged
     /// once the flow stops playing (or immediately, if the flow is
     /// not currently playing).
-    /// 
+    ///
     /// Commands sent from a given thread are always received in order, so it
     /// is completely reasonable to call `start_flow` immediately followed
     /// by `unprecache` for the same flow.
-    /// 
+    ///
     /// This is *not* recursive. If you call `precache` twice, then call
     /// `unprecache` once, the flow will no longer be precached.
     fn unprecache(&mut self, flow_name: String) {
@@ -155,7 +155,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     }
     /// Fades a given MixControl to the given volume (0.0 to 1.0), using the
     /// given fading curve, over the given time period (in seconds).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -165,7 +165,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Fades all *currently existing* mix controls whose names strictly
     /// start with the given prefix to the given volume (0.0 to 1.0), using the
     /// given fading curve, over the given time period (in seconds).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -175,7 +175,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Fades all *currently existing* mix controls, *including* `main`, to
     /// the given volume (0.0 to 1.0), using the given fading curve, over the
     /// given time period (in seconds).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -185,7 +185,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Fades all *currently existing* mix controls, *except* `main`, to the
     /// given volume (0.0 to 1.0), using the given fading curve, over the given
     /// time period (in seconds).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -197,7 +197,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// MixControl will be removed from existence rather than simply zeroed;
     /// future commands to "prefixed" and "all" will not resuscitate it
     /// (unless it is the target of a future, specific command).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
     fn fade_mix_control_out(&mut self, control_name: String, fade_length: PosFloat, fade_type: FadeType) {
@@ -210,7 +210,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// simply zeroed; future commands to "prefixed" and "all" will not
     /// resuscitate it (unless it is the target of a future, specific
     /// command).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
     fn fade_prefixed_mix_controls_out(&mut self, control_prefix: String, fade_length: PosFloat, fade_type: FadeType) {
@@ -222,7 +222,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// removed from existence rather than simply zeroed; future commands to
     /// "prefixed" and "all" will not resuscitate it (unless it is the target
     /// of a future, specific command).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
     fn fade_all_mix_controls_out(&mut self, fade_length: PosFloat, fade_type: FadeType) {
@@ -234,14 +234,14 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// removed from existence rather than simply zeroed; future commands to
     /// "prefixed" and "all" will not resuscitate it (unless it is the target
     /// of a future, specific command).
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
     fn fade_all_mix_controls_except_main_out(&mut self, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllMixControlsExceptMainOut { fade_type, fade_length });
     }
     /// Kills a given MixControl instantly, as if you yanked an audio cable.
-    /// 
+    ///
     /// This is similar to fading that MixControl out over zero seconds, except
     /// that the MixControl in question is immediately removed (and therefore
     /// ineligible for `prefixed` or `all` commands), instead of only being
@@ -251,7 +251,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     }
     /// Kills all MixControls whose names strictly start with the given prefix,
     /// as if you yanked an audio cable.
-    /// 
+    ///
     /// This is similar to fading that MixControl out over zero seconds, except
     /// that the MixControl in question is immediately removed (and therefore
     /// ineligible for `prefixed` or `all` commands), instead of only being
@@ -261,7 +261,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     }
     /// Kills all MixControls, *including* `main`, as if you yanked an audio
     /// cable.
-    /// 
+    ///
     /// This is similar to fading that MixControl out over zero seconds, except
     /// that the MixControl in question is immediately removed (and therefore
     /// ineligible for `prefixed` or `all` commands), instead of only being
@@ -271,7 +271,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     }
     /// Kills all MixControls, *except* `main`, as if you yanked an audio
     /// cable.
-    /// 
+    ///
     /// This is similar to fading that MixControl out over zero seconds, except
     /// that the MixControl in question is immediately removed (and therefore
     /// ineligible for `prefixed` or `all` commands), instead of only being
@@ -283,7 +283,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// is being newly started, it will be faded up from zero volume to the
     /// target volume, with the given fade curve. If the flow was
     /// already playing, acts just like `fade_flow_to`.
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -293,11 +293,11 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// Fades a given flow to the given volume (0.0 to 1.0), using the
     /// given fading curve, over the given time period (in seconds). Does
     /// nothing if the flow is not currently playing.
-    /// 
+    ///
     /// Flows with zero volume will continue silently "playing", waiting to
     /// be faded back up to non-zero volume. If this isn't what you want, use
     /// `fade_flow_out` instead.
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -308,11 +308,11 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// the given prefix to the given volume (0.0 to 1.0), using the given
     /// fading curve, over the given time period (in seconds). Does nothing to
     /// flows that haven't been started, or that have finished fading out.
-    /// 
+    ///
     /// Flows with zero volume will continue silently "playing", waiting to
     /// be faded back up to non-zero volume. If this isn't what you want, use
     /// `fade_prefixed_flows_out` instead.
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -323,11 +323,11 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// 1.0), using the given fading curve, over the given time period (in
     /// seconds). Does nothing to flows that haven't been started, or that
     /// have finished fading out.
-    /// 
+    ///
     /// Flows with zero volume will continue silently "playing", waiting to
     /// be faded back up to non-zero volume. If this isn't what you want, use
     /// `fade_prefixed_flows_out` instead.
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals. Don't give a volume above 1.0 unless you are sure
     /// it won't cause clipping. Don't give negative volumes.
@@ -338,7 +338,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// over the given time period (in seconds). Does nothing if the flow
     /// is not currently playing, or has already faded out. When the fade is
     /// complete, the flow will be stopped.
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
     fn fade_flow_out(&mut self, flow_name: String, fade_length: PosFloat, fade_type: FadeType) {
@@ -348,7 +348,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// the given prefix to zero volume, using the given fading curve, over the
     /// given time period (in seconds). Does nothing to flows that haven't
     /// been started, or that have already finished fading out.
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
     fn fade_prefixed_flows_out(&mut self, flow_prefix: String, fade_length: PosFloat, fade_type: FadeType) {
@@ -358,14 +358,14 @@ pub trait EngineCommands : EngineCommandIssuer {
     /// fading curve, over the given time period (in seconds). Does nothing to
     /// flows that haven't been started, or that have already finished
     /// fading out.
-    /// 
+    ///
     /// Use `FadeType::Exponential` unless you are doing intermixing of
     /// correlated signals.
     fn fade_all_flows_out(&mut self, fade_length: PosFloat, fade_type: FadeType) {
         self.issue(EngineCommand::FadeAllFlowsOut { fade_type, fade_length });
     }
     /// Kills a given flow instantly.
-    /// 
+    ///
     /// This is similar to fading that flow out over zero seconds, except
     /// that the flow in question is immediately removed (and therefore
     /// ineligible for `prefixed` or `all` commands, and able to be started
@@ -376,7 +376,7 @@ pub trait EngineCommands : EngineCommandIssuer {
     }
     /// Kills all *currently playing* flows whose names strictly start with
     /// the given prefix instantly.
-    /// 
+    ///
     /// This is similar to fading that flow out over zero seconds, except
     /// that the flow in question is immediately removed (and therefore
     /// ineligible for `prefixed` or `all` commands, and able to be started
@@ -386,7 +386,7 @@ pub trait EngineCommands : EngineCommandIssuer {
         self.issue(EngineCommand::KillPrefixedFlows { flow_prefix });
     }
     /// Kills all *currently playing* flows instantly.
-    /// 
+    ///
     /// This is similar to fading those flows out over zero seconds, except
     /// that the flows in question are immediately removed (and therefore
     /// ineligible for `prefixed` or `all` commands, and able to be started
@@ -399,7 +399,7 @@ pub trait EngineCommands : EngineCommandIssuer {
 
 /// An in-progress transaction. Create one by calling `begin_transaction` on
 /// any type that can receive commands.
-/// 
+///
 /// You can send commands to a transaction, exactly like you can to an
 /// `Engine`. When you `commit` a transaction, all of the commands will be sent
 /// at once, atomically, with neither a gap nor any interleaving with any other
@@ -425,7 +425,7 @@ impl<'a, T: EngineCommandIssuer + ?Sized> Transaction<'a, T> {
     }
     /// Aborts an in-progress transaction. None of the commands put into it
     /// will be issued.
-    /// 
+    ///
     /// Done implicitly if the transaction is not explicitly `commit`ted.
     pub fn abort(self) {}
 }
@@ -449,7 +449,7 @@ pub struct Commander {
 impl Commander {
     /// Makes another, independent `Commander` that sends commands to the
     /// same underlying `Engine`.
-    /// 
+    ///
     /// Equivalent to `clone()`, but can also be called on an `Engine`.
     pub fn clone_commander(&self) -> Commander { self.clone() }
 }
@@ -489,8 +489,7 @@ pub struct Engine {
     flow_control_readout: Arc<RwLock<HashMap<String, StringOrNumber>>>,
     readout_needs_update: bool,
     sound_delegate: Arc<dyn SoundDelegate>,
-    background_loading: bool,
-    soundman: SoundMan,
+    soundman: Box<dyn GenericSoundMan>,
     flow_loads: HashMap<String, FlowLoadStatus>,
     speaker_layout: SpeakerLayout,
     sample_rate: PosFloat,
@@ -584,10 +583,13 @@ impl Debug for PlayingSoundID {
 }
 
 impl Engine {
-    /// Creates a new Engine with no soundtrack and no controls. Once these
-    /// properties are set, they cannot be changed without creating a new
-    /// Engine.
-    /// 
+    /// Creates a new Engine with the given properties, which will perform
+    /// loading in the background using a purely internal `Switchyard`. Only
+    /// available if you haven't disabled the `"switchyard"` feature.
+    ///
+    /// Once these properties are set, they cannot be changed without creating
+    /// a new Engine.
+    ///
     /// - `speaker_layout`: What kind of speaker layout your listener has. When
     ///   in doubt, use `Stereo`.
     /// - `sample_rate`: Number of samples per second you will be outputting.
@@ -595,26 +597,60 @@ impl Engine {
     ///   If `None` or 0, will use a reasonable default based on the number of
     ///   available hardware threads and whether background loading is
     ///   requested.
-    /// - `background_loading`: Should be true if you're in a realtime context,
-    ///   like a game, false if you're in a batch context, like recording a
-    ///   pre-rendered video.
+    /// - `num_threads`: If `None`, will use a reasonable default based on the
+    ///   number of available hardware threads. If `Some(x)`, will use that
+    ///   exact number of hardware threads.
+    /// - `affinity`: Offset added to core affinity of threads. When in doubt,
+    ///   use `0`.
     pub fn new(
         sound_delegate: Arc<dyn SoundDelegate>,
         speaker_layout: SpeakerLayout,
         sample_rate: PosFloat,
         num_threads: Option<NonZeroUsize>,
-        background_loading: bool
+        affinity: usize,
     ) -> Engine {
-        let num_threads = num_threads
-            .map(NonZeroUsize::get)
-            .unwrap_or_else(|| {
-            if background_loading { (num_cpus::get() / 3).max(1) }
-            else { 1 }
-        });
+        let num_logical_cores = num_cpus::get();
+        let num_threads = num_threads.map(NonZeroUsize::get)
+        .unwrap_or_else(|| num_cpus::get() / 3).max(1);
+        use ::switchyard::{Switchyard, threads::ThreadAllocationOutput};
+        let runtime = Switchyard::new(
+            (0..num_threads).map(|i| ThreadAllocationOutput {
+                name: Some(format!("SMSworker{i}")),
+                ident: i,
+                stack_size: Some(1 * 1024 * 1024),
+                affinity: Some((i+affinity)%num_logical_cores),
+            }),
+            || (),
+        ).expect("Unable to create Switchyard runtime");
+        Self::new_with_runtime(sound_delegate, speaker_layout, sample_rate, Arc::new(runtime))
+    }
+    /// Creates a new Engine with the given properties using a particular custom
+    /// [`TaskRuntime`](trait.TaskRuntime.html) for loading tasks. If you want
+    /// to perform offline rendering, or another task where you just want all
+    /// loading to happen synchronously, pass `Arc::new(ForegroundTaskRuntime)`
+    /// as the loading runtime. If you don't care, and haven't disabled the
+    /// `switchyard` feature, just use `new` instead.
+    ///
+    /// Once these properties are set, they cannot be changed without creating
+    /// a new Engine.
+    ///
+    /// - `speaker_layout`: What kind of speaker layout your listener has. When
+    ///   in doubt, use `Stereo`.
+    /// - `sample_rate`: Number of samples per second you will be outputting.
+    /// - `num_threads`: Number of threads to use for decoding and streaming.
+    ///   If `None` or 0, will use a reasonable default based on the number of
+    ///   available hardware threads and whether background loading is
+    ///   requested.
+    pub fn new_with_runtime<Runtime: TaskRuntime>(
+        sound_delegate: Arc<dyn SoundDelegate>,
+        speaker_layout: SpeakerLayout,
+        sample_rate: PosFloat,
+        loading_rt: Arc<Runtime>,
+    ) -> Engine {
         let (command_tx, command_rx) = unbounded();
         Engine {
             mixer: Mixer::new(speaker_layout.get_num_channels()),
-            soundman: SoundMan::new(sound_delegate.clone(), num_threads, background_loading),
+            soundman: Box::new(SoundMan::new(sound_delegate.clone(), loading_rt)),
             sound_delegate, speaker_layout, sample_rate,
             command_tx, command_rx,
             live_soundtrack: Soundtrack::new(),
@@ -631,7 +667,7 @@ impl Engine {
             mix_controls_fading_out: HashSet::new(),
             flow_loads: HashMap::new(),
             deferred_kill: false,
-            background_loading, starting_flows: HashSet::new(),
+            starting_flows: HashSet::new(),
         }
     }
     /// Makes an independent `Commander` that can send commands to this
@@ -653,9 +689,6 @@ impl Engine {
     pub fn get_speaker_layout(&self) -> SpeakerLayout { self.speaker_layout }
     /// Returns the sample rate this `Engine` was initialized for.
     pub fn get_sample_rate(&self) -> PosFloat { self.sample_rate }
-    /// Returns whether this `Engine` was initialized with background loading
-    /// turned on or off.
-    pub fn is_loading_in_background(&self) -> bool { self.background_loading }
     /// Mix some audio, advance time! `out` must have a number of elements
     /// divisible by the number of speaker channels. Any existing data in `out`
     /// is mixed with the active music data. You may or may not want to zero
@@ -677,9 +710,9 @@ impl Engine {
             // See if any newly-started flows are ready to start
             self.starting_flows.retain(|flow_name| {
                 let load_status = self.flow_loads.get_mut(flow_name).unwrap();
-                if load_status.is_ready(&mut self.soundman) {
+                if load_status.is_ready(self.soundman.as_mut()) {
                     // oh boy! start the start node!
-                    let flow = 
+                    let flow =
                     self.live_soundtrack.flows.get(flow_name).unwrap();
                     self.active_flow_nodes.push(ActiveNode {
                         flow_name: flow_name.to_string(),
@@ -747,7 +780,7 @@ impl Engine {
                             flow_controls.insert(control_name.clone(), evaluate(flow_controls, ops));
                         },
                         Command::Goto(ops, cond, index) => {
-                            if evaluate(flow_controls, ops).is_truthy() == *cond { 
+                            if evaluate(flow_controls, ops).is_truthy() == *cond {
                                 n = *index;
                             }
                         },
@@ -761,11 +794,11 @@ impl Engine {
             });
             for StringAndAHalf(flow_name, node_name) in nodes_to_start.into_iter() {
                 let node_name = node_name.expect("SMS internal bug: a node with no name was put into nodes_to_start, which should not be possible");
-                // Unwrapping this then wrapping it back in a Some feels wrong, 
-                // but it avoids iteration if node_name is `None`. Of course, 
-                // since it panics, does it really matter if we do a few 
-                // iterations before crashing? I don't know, but you know: 
-                // premature optimization and all that. Probably need to 
+                // Unwrapping this then wrapping it back in a Some feels wrong,
+                // but it avoids iteration if node_name is `None`. Of course,
+                // since it panics, does it really matter if we do a few
+                // iterations before crashing? I don't know, but you know:
+                // premature optimization and all that. Probably need to
                 // re-evaluate this later. -n
                 match self.active_flow_nodes.iter_mut().find(|x| x.flow_name == flow_name && x.node.name == Some(node_name.clone())) {
                     Some(_active_flow_node) => {
@@ -842,7 +875,7 @@ impl Engine {
             // Consume queued sounds whose times have come
             while self.queued_sounds.peek().map(|x| x.when <= now).unwrap_or(false) {
                 let queued_sound = self.queued_sounds.pop().unwrap();
-                if let Some(adapter) = adaptify(&self.sound_delegate, &mut self.soundman, &*queued_sound.sound, queued_sound.fade_in, queued_sound.length, queued_sound.fade_out, self.sample_rate, self.speaker_layout) {
+                if let Some(adapter) = adaptify(&self.sound_delegate, self.soundman.as_mut(), &*queued_sound.sound, queued_sound.fade_in, queued_sound.length, queued_sound.fade_out, self.sample_rate, self.speaker_layout) {
                     self.mixer.play(adapter, queued_sound.who);
                 }
             }
@@ -857,7 +890,7 @@ impl Engine {
                 self.mixer.mix(buf, &mut mix_buf[..buf.len()],
                     VolumeGetWrapper {
                         mix_controls: &mut self.mix_controls,
-                        flow_volumes: &mut self.flow_volumes,    
+                        flow_volumes: &mut self.flow_volumes,
                         node_volumes: &mut self.node_volumes,
                         flows_fading_out: &self.flows_fading_out,
                         starting_flows: &self.starting_flows,
@@ -923,7 +956,7 @@ impl Engine {
         self.mixer.bump(
             VolumeGetWrapper {
                 mix_controls: &mut self.mix_controls,
-                flow_volumes: &mut self.flow_volumes,    
+                flow_volumes: &mut self.flow_volumes,
                 node_volumes: &mut self.node_volumes,
                 flows_fading_out: &self.flows_fading_out,
                 starting_flows: &self.starting_flows,
@@ -944,7 +977,7 @@ impl Engine {
             else {
                 let load_status = self.flow_loads.get_mut(k).unwrap();
                 load_status.active_loading = false;
-                load_status.maybe_unload(&self.live_soundtrack, &mut self.soundman);
+                load_status.maybe_unload(&self.live_soundtrack, self.soundman.as_mut());
                 self.node_volumes.retain(|node_id, _| {
                     &node_id.0 != k
                 });
@@ -984,13 +1017,13 @@ impl Engine {
                     |name| self.sound_delegate.warning(&format!("missing sequence: {:?}", name))
                 ),
             };
-            new_load_status.maybe_load(&self.live_soundtrack, &mut self.soundman);
+            new_load_status.maybe_load(&self.live_soundtrack, self.soundman.as_mut());
             new_flow_loads.insert(flow_name.clone(), new_load_status);
         }
         // unload the old ones AFTER loading the new ones, that way anything
         // that's still in common will remain loaded
         for load_status in self.flow_loads.values_mut() {
-            load_status.force_unload(&self.live_soundtrack, &mut self.soundman);
+            load_status.force_unload(&self.live_soundtrack, self.soundman.as_mut());
         }
         self.flow_loads = new_flow_loads;
     }
@@ -1153,7 +1186,7 @@ impl EngineCommandIssuer for Engine {
                         }
                         else {
                             load_status.precaching = true;
-                            load_status.maybe_load(&self.live_soundtrack, &mut self.soundman);
+                            load_status.maybe_load(&self.live_soundtrack, self.soundman.as_mut());
                         }
                     },
                     None => {
@@ -1167,7 +1200,7 @@ impl EngineCommandIssuer for Engine {
                     Some(load_status) => {
                         if load_status.precaching {
                             load_status.precaching = false;
-                            load_status.maybe_unload(&self.live_soundtrack, &mut self.soundman);
+                            load_status.maybe_unload(&self.live_soundtrack, self.soundman.as_mut());
                         }
                         else {
                             self.sound_delegate.warning(&format!("attempt to unprecache flow {:?} that wasn't currently precached", flow_name));
@@ -1179,7 +1212,7 @@ impl EngineCommandIssuer for Engine {
                 for load_status in self.flow_loads.values_mut() {
                     if load_status.precaching {
                         load_status.precaching = false;
-                        load_status.maybe_unload(&self.live_soundtrack, &mut self.soundman);
+                        load_status.maybe_unload(&self.live_soundtrack, self.soundman.as_mut());
                     }
                 }
             },
@@ -1311,7 +1344,7 @@ impl EngineCommandIssuer for Engine {
                 }
                 else {
                     load_status.active_loading = true;
-                    load_status.maybe_load(&self.live_soundtrack, &mut self.soundman);
+                    load_status.maybe_load(&self.live_soundtrack, self.soundman.as_mut());
                     // we will check if it's loaded the next time the handle turns
                     self.starting_flows.insert(flow_name.clone());
                     self.node_volumes.insert(StringAndAHalf(flow_name.clone(), None), Fader::new(PosFloat::ONE));
@@ -1379,7 +1412,7 @@ impl EngineCommandIssuer for Engine {
             },
             KillPrefixedFlows { flow_prefix } => {
                 self.starting_flows.retain(|flow_name| {
-                    !flow_name.starts_with(&flow_prefix)    
+                    !flow_name.starts_with(&flow_prefix)
                 });
                 self.node_volumes.retain(|node_id, _| {
                     !node_id.0.starts_with(&flow_prefix)
@@ -1428,7 +1461,7 @@ impl FlowLoadStatus {
     fn should_be_loaded(&self) -> bool {
         self.precaching || self.active_loading
     }
-    fn is_ready(&mut self, soundman: &mut SoundMan) -> bool {
+    fn is_ready(&mut self, soundman: &mut dyn GenericSoundMan) -> bool {
         if self.known_all_ready {
             return true
         }
@@ -1440,7 +1473,7 @@ impl FlowLoadStatus {
         self.known_all_ready = true;
         return true
     }
-    fn maybe_unload(&mut self, _live_soundtrack: &Soundtrack, soundman: &mut SoundMan) {
+    fn maybe_unload(&mut self, _live_soundtrack: &Soundtrack, soundman: &mut dyn GenericSoundMan) {
         if !self.load_requested || self.should_be_loaded() { return }
         for sound in self.known_sounds.iter() {
             soundman.unload(&*sound);
@@ -1448,14 +1481,14 @@ impl FlowLoadStatus {
         self.load_requested = false;
         self.known_all_ready = false;
     }
-    fn maybe_load(&mut self, _live_soundtrack: &Soundtrack, soundman: &mut SoundMan) {
+    fn maybe_load(&mut self, _live_soundtrack: &Soundtrack, soundman: &mut dyn GenericSoundMan) {
         if self.load_requested || !self.should_be_loaded() { return }
         for sound in self.known_sounds.iter() {
             soundman.load(&*sound);
         }
         self.load_requested = true;
     }
-    fn force_unload(&mut self, live_soundtrack: &Soundtrack, soundman: &mut SoundMan) {
+    fn force_unload(&mut self, live_soundtrack: &Soundtrack, soundman: &mut dyn GenericSoundMan) {
         self.precaching = false;
         self.active_loading = false;
         self.maybe_unload(live_soundtrack, soundman)

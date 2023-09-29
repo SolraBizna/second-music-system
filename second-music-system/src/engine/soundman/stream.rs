@@ -2,15 +2,12 @@ use super::*;
 
 use std::{
     borrow::BorrowMut,
-    collections::{HashMap, hash_map::Entry as HashMapEntry},
-    hash::{Hash, Hasher},
-    ops::Deref,
+    collections::HashMap,
     sync::{Arc, Weak},
 };
 
 use vecmap::{VecMap, map::Entry as VecMapEntry};
-use parking_lot::Mutex;
-use tokio::sync::oneshot;
+use crossbeam::channel;
 
 struct EmptyStream;
 impl SoundReader<u8> for EmptyStream {
@@ -85,45 +82,6 @@ fn load_stream(delegate: &dyn SoundDelegate, name: &str, start_point: PosFloat) 
     }
 }
 
-/// A simple SoundMan implementation that loads streams when `get` is called
-/// and otherwise performs no bookkeeping. Used for StreamMan when background
-/// loading is not in effect.
-pub(crate) struct ForegroundStreamMan {
-    delegate: Arc<dyn SoundDelegate>,
-}
-
-impl ForegroundStreamMan {
-    pub(crate) fn new(delegate: Arc<dyn SoundDelegate>) -> ForegroundStreamMan {
-        ForegroundStreamMan { delegate }
-    }
-}
-
-impl SoundManImpl for ForegroundStreamMan {
-    fn load(&mut self, _sound: &str, _start: PosFloat, loading_rt: &Option<Arc<Runtime>>) {
-        assert!(loading_rt.is_none(), "ForegroundStreamMan is being used, but there is a background loading runtime!");
-    }
-
-    fn unload(&mut self, _sound: &str, _start: PosFloat) -> bool {
-        true
-    }
-
-    fn unload_all(&mut self) {
-    }
-
-    fn is_ready(&mut self, _sound: &str, _start: PosFloat) -> bool {
-        true
-    }
-    fn get_sound(
-        &mut self,
-        sound: &str,
-        start: PosFloat,
-        end: PosFloat,
-    ) -> Option<FormattedSoundStream> {
-        // TODO: respect end
-        Some(load_stream(&*self.delegate, sound, start).0)
-    }
-}
-
 /// Tea, predicated on a question.
 #[derive(Debug)]
 enum Predicated<T,F=(),U=()> {
@@ -163,15 +121,15 @@ impl<T, F, U: Default> Default for Predicated<T,F,U> {
 enum CachedStream {
     /// A stream that hasn't been loaded yet, but whose loading has been
     /// requested.
-    LoadingStream(oneshot::Receiver<(FormattedSoundStream, bool)>),
+    LoadingStream(channel::Receiver<(FormattedSoundStream, bool)>),
     /// A stream that has been loaded, and is currently ready.
     LoadedStream(FormattedSoundStream, bool),
 }
 
 impl CachedStream {
-    fn begin_loading(delegate: Arc<dyn SoundDelegate>, name: String, start_point: PosFloat, loading_runtime: &Arc<Runtime>) -> CachedStream {
-        let (tx, rx) = oneshot::channel();
-        loading_runtime.spawn(async move {
+    fn begin_loading<Runtime: TaskRuntime>(delegate: Arc<dyn SoundDelegate>, name: String, start_point: PosFloat, loading_runtime: &Arc<Runtime>) -> CachedStream {
+        let (tx, rx) = channel::bounded(1);
+        loading_runtime.spawn_task(TaskType::StreamLoad, async move {
             let _ = tx.send(load_stream(&*delegate, &name, start_point));
         });
         CachedStream::LoadingStream(rx)
@@ -182,7 +140,7 @@ impl CachedStream {
         if let CachedStream::LoadingStream(rx) = self {
             match rx.try_recv() {
                 Ok((stream, can_seek)) => *self = CachedStream::LoadedStream(stream, can_seek),
-                Err(oneshot::error::TryRecvError::Empty) => {
+                Err(channel::TryRecvError::Empty) => {
                     // nothing we can do right now
                 }
                 _ => {
@@ -195,12 +153,6 @@ impl CachedStream {
     fn is_ready(&self) -> bool {
         match self {
             CachedStream::LoadedStream(_, _) => true,
-            _ => false,
-        }
-    }
-    fn needs_check(&self) -> bool {
-        match self {
-            CachedStream::LoadingStream(_) => true,
             _ => false,
         }
     }
@@ -218,15 +170,15 @@ struct AtStartPoint {
 }
 
 impl AtStartPoint {
-    fn load_one_more(&mut self, delegate: &Arc<dyn SoundDelegate>, name: &str, start_point: PosFloat, loading_runtime: &Arc<Runtime>) {
+    fn load_one_more<Runtime: TaskRuntime>(&mut self, delegate: &Arc<dyn SoundDelegate>, name: &str, start_point: PosFloat, loading_runtime: &Arc<Runtime>) {
         self.loads += 1;
         if let Predicated::Unavailable(x) = self.cloneable.as_mut() {
             while x.len() < self.loads as usize {
                 x.push(CachedStream::begin_loading(delegate.clone(), name.to_string(), start_point, loading_runtime));
-            }   
+            }
         }
     }
-    fn check_load(&mut self, delegate: &Arc<dyn SoundDelegate>, sound: &str, start_point: PosFloat, loading_rt: &Weak<Runtime>) -> Option<()> {
+    fn check_load<Runtime: TaskRuntime>(&mut self, delegate: &Arc<dyn SoundDelegate>, sound: &str, start_point: PosFloat, loading_rt: &Weak<Runtime>) -> Option<()> {
         if let Predicated::Unknown(cached) = self.cloneable.as_mut() {
             cached.check_loading(&**delegate, sound);
             match cached {
@@ -270,15 +222,15 @@ struct IndividualSound {
 /// A SoundMan implementation that performs stream loading in the background,
 /// but decodes the audio on an as-needed basis in the sound thread. Used as
 /// StreamMan when background loading is in effect.
-pub(crate) struct BackgroundStreamMan {
+pub(crate) struct StreamMan<Runtime: TaskRuntime> {
     delegate: Arc<dyn SoundDelegate>,
     sounds: HashMap<String, IndividualSound>,
     loading_rt: Weak<Runtime>,
 }
 
-impl BackgroundStreamMan {
-    pub(crate) fn new(delegate: Arc<dyn SoundDelegate>, loading_rt: &Arc<Runtime>) -> BackgroundStreamMan {
-        BackgroundStreamMan {
+impl<Runtime: TaskRuntime> StreamMan<Runtime> {
+    pub(crate) fn new(delegate: Arc<dyn SoundDelegate>, loading_rt: &Arc<Runtime>) -> StreamMan<Runtime> {
+        StreamMan {
             delegate,
             sounds: HashMap::new(),
             loading_rt: Arc::downgrade(loading_rt),
@@ -286,9 +238,8 @@ impl BackgroundStreamMan {
     }
 }
 
-impl SoundManImpl for BackgroundStreamMan {
-    fn load(&mut self, sound: &str, start: PosFloat, loading_rt: &Option<Arc<Runtime>>) {
-        let loading_rt = loading_rt.as_ref().unwrap();
+impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for StreamMan<Runtime> {
+    fn load(&mut self, sound: &str, start: PosFloat, loading_rt: &Arc<Runtime>) {
         let individual_sound = if let Some(individual_sound) = self.sounds.get_mut(sound) {
             individual_sound
         } else {
@@ -404,64 +355,6 @@ impl SoundManImpl for BackgroundStreamMan {
             Predicated::Available(parent) => {
                 Some(parent.attempt_clone())
             },
-        }
-    }
-}
-
-/// Either a ForegroundStreamMan or a BackgroundStreamMan, depending on whether
-/// background loading is in use.
-///
-/// Yes, I could have used a `dyn SoundManImpl` instead of making this enum.
-/// But arbitrary jumps are predicted less well than a nearly-always-consistent
-/// if.
-pub(crate) enum StreamMan {
-    Foreground(ForegroundStreamMan),
-    Background(BackgroundStreamMan),
-}
-
-impl StreamMan {
-    pub(crate) fn new(delegate: Arc<dyn SoundDelegate>, loading_rt: Option<&Arc<Runtime>>) -> StreamMan {
-        match loading_rt {
-            None => StreamMan::Foreground(ForegroundStreamMan::new(delegate)),
-            Some(loading_rt) => StreamMan::Background(BackgroundStreamMan::new(delegate, loading_rt)),
-        }
-    }
-}
-
-impl SoundManImpl for StreamMan {
-    fn load(&mut self, sound: &str, start: PosFloat, loading_rt: &Option<Arc<Runtime>>) {
-        match self {
-            StreamMan::Foreground(x) => x.load(sound, start, loading_rt),
-            StreamMan::Background(x) => x.load(sound, start, loading_rt),
-        }
-    }
-    fn unload(&mut self, sound: &str, start: PosFloat) -> bool {
-        match self {
-            StreamMan::Foreground(x) => x.unload(sound, start),
-            StreamMan::Background(x) => x.unload(sound, start),
-        }
-    }
-    fn unload_all(&mut self) {
-        match self {
-            StreamMan::Foreground(x) => x.unload_all(),
-            StreamMan::Background(x) => x.unload_all(),
-        }
-    }
-    fn is_ready(&mut self, sound: &str, start: PosFloat) -> bool {
-        match self {
-            StreamMan::Foreground(x) => x.is_ready(sound, start),
-            StreamMan::Background(x) => x.is_ready(sound, start),
-        }
-    }
-    fn get_sound(
-        &mut self,
-        sound: &str,
-        start: PosFloat,
-        end: PosFloat,
-    ) -> Option<FormattedSoundStream> {
-        match self {
-            StreamMan::Foreground(x) => x.get_sound(sound, start, end),
-            StreamMan::Background(x) => x.get_sound(sound, start, end),
         }
     }
 }

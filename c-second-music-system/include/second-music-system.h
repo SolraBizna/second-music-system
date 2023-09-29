@@ -126,7 +126,7 @@ struct SMS_FormattedSoundStream* SMS_FormattedSoundStream_new(
     // Must be one of the SMS_SOUND_FORMAT_* constants above.
     int format,
     // Produce some sound, placing it into the target buffer.
-    // 
+    //
     // Return the number of *samples* (not *sample frames*) that were written
     // to buf. If this is not *exactly* equal to the size of the buf, then the
     // stream is assumed to have been ended; either it will be disposed of,
@@ -179,7 +179,7 @@ struct SMS_FormattedSoundStream* SMS_FormattedSoundStream_new(
     // The default implementation will try to use `skip_coarse` to skip
     // ahead, and then repeatedly `read` into the target buffer until the
     // exact number of target samples are consumed.
-    // 
+    //
     // `buf` is provided as scratch space.
     //
     // Note: The given size_t value is the number of samples in the buffer,
@@ -188,9 +188,9 @@ struct SMS_FormattedSoundStream* SMS_FormattedSoundStream_new(
     // Attempt to efficiently skip *up to* a large number of *samples*, by
     // discarding partial buffers, skipping packets, seeking in the file,
     // etc. Return the number of *samples* skipped, possibly including zero.
-    // 
+    //
     // Default implementation just returns 0.
-    // 
+    //
     // `buf` is provided as scratch space.
     //
     // Note: The given size_t value is the number of samples in the buffer,
@@ -264,22 +264,25 @@ struct SMS_Engine;
 // Creates a new Engine with no soundtrack and no controls. Once these
 // properties are set, they cannot be changed without creating a new
 // Engine.
-// 
+//
 // - `speaker_layout`: What kind of speaker layout your listener has. When
 //   in doubt, use `SMS_SPEAKER_LAYOUT_STEREO`.
 // - `sample_rate`: Number of samples per second you will be outputting.
-// - `num_threads`: Number of threads to use for decoding and streaming.
-//   If 0, will use a reasonable default based on the number of available
-//   hardware threads and whether background loading is requested.
 // - `background_loading`: Should be non-zero if you're in a realtime
 //   context, like a game, zero if you're in a batch context, like
-//   recording a pre-rendered video.
+//   recording an offline-rendered video.
+// - `num_threads`: Number of threads to use for decoding and streaming.
+//   If 0, will use a reasonable default based on the number of available
+//   hardware threads. Ignored if `background_loading` is zero.
+// - `affinity`: Offset added to core affinity of threads. When in doubt,
+//   use `0`. Ignored if `background_loading` is zero.
 struct SMS_Engine* SMS_Engine_new(
     struct SMS_SoundDelegate* sound_delegate,
     int speaker_layout,
     float sample_rate,
+    int background_loading,
     int num_threads,
-    int background_loading
+    int affinity
 );
 void SMS_Engine_free(struct SMS_Engine*);
 
@@ -301,9 +304,6 @@ struct SMS_Soundtrack* SMS_Engine_copy_live_soundtrack(
 int SMS_Engine_get_speaker_layout(struct SMS_Engine*);
 // Returns the sample rate this `Engine` was initialized for.
 float SMS_Engine_get_sample_rate(struct SMS_Engine*);
-// Returns whether this `Engine` was initialized with background loading
-// turned on or off.
-int SMS_Engine_is_loading_in_background(struct SMS_Engine*);
 
 // Mix some audio, advance time! `out` must have a number of elements
 // divisible by the number of speaker channels. Any existing data in `out`

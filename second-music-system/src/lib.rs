@@ -16,6 +16,7 @@ mod delegate;
 mod engine;
 mod fader;
 mod reader;
+mod runtime;
 mod posfloat;
 
 use data::*;
@@ -31,6 +32,8 @@ pub use fader::*;
 pub use posfloat::*;
 #[doc(inline)]
 pub use reader::*;
+#[doc(inline)]
+pub use runtime::*;
 
 /// Encapsulates all the information about a soundtrack: what files to play,
 /// how to play them, etc. This is purely inert data. It can be built up

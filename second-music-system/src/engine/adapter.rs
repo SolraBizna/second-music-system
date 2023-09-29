@@ -9,7 +9,7 @@ use rateadapter::*;
 
 pub(crate) fn adaptify(
     delegate: &Arc<dyn SoundDelegate>,
-    soundman: &mut SoundMan,
+    soundman: &mut dyn GenericSoundMan,
     sound: &Sound,
     fade_in: PosFloat, length: Option<PosFloat>, fade_out: PosFloat,
     out_sample_rate: PosFloat, out_speaker_layout: SpeakerLayout,
