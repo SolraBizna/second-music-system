@@ -25,22 +25,20 @@ make_upmixer!(MonoToQuadraphonic(c) -> {
     rr = 0.0;
 });
 
-make_upmixer_with_lowpass!(MonoToSurround51(c) -> {
-    lowpass = c;
+make_upmixer!(MonoToSurround51(c) -> {
     fl = 0.0;
     fr = 0.0;
     c = c;
-    lfe = lowpass;
+    lfe = 0.0;
     rl = 0.0;
     rr = 0.0;
 });
 
-make_upmixer_with_lowpass!(MonoToSurround71(c) -> {
-    lowpass = c;
+make_upmixer!(MonoToSurround71(c) -> {
     fl = 0.0;
     fr = 0.0;
     c = c;
-    lfe = lowpass;
+    lfe = 0.0;
     rl = 0.0;
     rr = 0.0;
     sl = 0.0;
@@ -62,22 +60,20 @@ make_upmixer!(StereoToQuadraphonic(fl, fr) -> {
     rr = 0.0;
 });
 
-make_upmixer_with_lowpass!(StereoToSurround51(fl, fr) -> {
-    lowpass = (fl+fr) * (1.0 / 2.0);
+make_upmixer!(StereoToSurround51(fl, fr) -> {
     fl = fl;
     fr = fr;
     c = 0.0;
-    lfe = lowpass;
+    lfe = 0.0;
     rl = 0.0;
     rr = 0.0;
 });
 
-make_upmixer_with_lowpass!(StereoToSurround71(fl, fr) -> {
-    lowpass = (fl+fr) * (1.0 / 2.0);
+make_upmixer!(StereoToSurround71(fl, fr) -> {
     fl = fl;
     fr = fr;
     c = 0.0;
-    lfe = lowpass;
+    lfe = 0.0;
     rl = 0.0;
     rr = 0.0;
     sl = 0.0;
@@ -108,22 +104,20 @@ make_downmixer!(QuadraphonicToStereo(fl, fr, rl, rr) -> {
 
 type QuadraphonicToHeadphones = QuadraphonicToStereo;
 
-make_upmixer_with_lowpass!(QuadraphonicToSurround51(fl, fr, rl, rr) -> {
-    lowpass = (fl+fr+rl+rr) * (1.0 / 4.0);
+make_upmixer!(QuadraphonicToSurround51(fl, fr, rl, rr) -> {
     fl = fl;
     fr = fr;
     c = 0.0;
-    lfe = lowpass;
+    lfe = 0.0;
     rl = rl;
     rr = rr;
 });
 
-make_upmixer_with_lowpass!(QuadraphonicToSurround71(fl, fr, rl, rr) -> {
-    lowpass = (fl+fr+rl+rr) * (1.0 / 4.0);
+make_upmixer!(QuadraphonicToSurround71(fl, fr, rl, rr) -> {
     fl = fl;
     fr = fr;
     c = 0.0;
-    lfe = lowpass;
+    lfe = 0.0;
     rl = rl;
     rr = rr;
     sl = 0.0;
