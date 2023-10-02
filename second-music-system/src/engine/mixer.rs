@@ -18,7 +18,7 @@ pub(crate) trait VolumeGetter<ID: Debug> {
     ///
     /// `Some(ZERO)` is a perfectly valid volume, and we still need to consume
     /// audio in that case.
-    /// 
+    ///
     /// We assume that if `Some(0.0)` is returned, any further calls (in, say,
     /// a tight loop) will not result in a non-zero return. If you allow phase
     /// inversion (which... why?) then this assumption will not hold.
@@ -26,7 +26,7 @@ pub(crate) trait VolumeGetter<ID: Debug> {
     /// Return `None` if the sound should stop, `Some(false)` if the sound
     /// is currently playing at a fixed volume, or `Some(true)` if the sound
     /// is currently playing at a varying volume.
-    /// 
+    ///
     /// Guaranteed to be called exactly once per playing sample per output mix
     /// buffer, before any calls to `get_volume`. You can use this to, for
     /// example, mark each components of the given identity as individually
@@ -84,7 +84,7 @@ impl<ID: Debug> Mixer<ID> {
             let is_varying = volume_getter.is_varying(identity);
             let len = match is_varying {
                 None => {
-                    return false;   
+                    return false;
                 },
                 Some(false) => {
                     // Time to mix!

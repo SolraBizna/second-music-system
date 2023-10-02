@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::data::{PredicateOp, StringOrNumber};
 
+use compact_str::CompactString;
+
 macro_rules! op {
     ($stack:ident, |$operand:ident| $expr:expr) => {
         {
@@ -22,7 +24,7 @@ macro_rules! op {
     };
 }
 
-pub(crate) fn evaluate(flow_controls: &HashMap<String, StringOrNumber>, 
+pub(crate) fn evaluate(flow_controls: &HashMap<CompactString, StringOrNumber>,
     ops: &[PredicateOp]) -> StringOrNumber {
     let mut stack: Vec<StringOrNumber> = Vec::with_capacity(16);
     for op in ops.iter() {

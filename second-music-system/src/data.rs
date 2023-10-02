@@ -17,7 +17,7 @@ pub const EXPRESSION_SPLIT_CHARS: &str = r##"!#$%&()*+,-./:;<=>?[\]^{|}~`@≤≥
 /// A string, or a number.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringOrNumber {
-    String(String),
+    String(CompactString),
     Number(f32),
 }
 
@@ -27,7 +27,7 @@ impl StringOrNumber {
     /// - Number: not equal to zero (this means NaN is true)
     pub fn is_truthy(&self) -> bool {
         match self {
-            StringOrNumber::String(s) => !s.is_empty() && s != "0" && s != "false",
+            StringOrNumber::String(s) => !s.is_empty() && s.as_str() != "0" && s.as_str() != "false",
             StringOrNumber::Number(n) => *n != 0.0,
         }
     }
@@ -57,11 +57,15 @@ impl StringOrNumber {
 }
 
 impl Default for StringOrNumber {
-    fn default() -> StringOrNumber { StringOrNumber::String(String::new()) }
+    fn default() -> StringOrNumber { StringOrNumber::String(CompactString::new("")) }
 }
 
 impl From<String> for StringOrNumber {
-    fn from(string: String) -> StringOrNumber { StringOrNumber::String(string) }
+    fn from(string: String) -> StringOrNumber { StringOrNumber::String(string.into()) }
+}
+
+impl From<CompactString> for StringOrNumber {
+    fn from(string: CompactString) -> StringOrNumber { StringOrNumber::String(string) }
 }
 
 impl From<f32> for StringOrNumber {
@@ -82,7 +86,7 @@ impl FromStr for StringOrNumber {
             Err(format!("character {:?} is not allowed in a flow control string", x))
         }
         else {
-            Ok(StringOrNumber::String(i.to_string()))
+            Ok(StringOrNumber::String(i.to_compact_string()))
         }
     }
 }
@@ -103,8 +107,8 @@ impl PartialOrd<StringOrNumber> for StringOrNumber {
 pub(crate) struct Sound {
     // All times are in seconds
     // unique within a soundtrack
-    pub(crate) name: String,
-    pub(crate) path: String,
+    pub(crate) name: CompactString,
+    pub(crate) path: CompactString,
     pub(crate) start: PosFloat,
     pub(crate) end: PosFloat,
     /// If true, the underlying audio file should be streamed, rather than
@@ -116,8 +120,8 @@ pub(crate) struct Sound {
 #[derive(Debug,PartialEq)]
 pub(crate) enum SequenceElement {
     PlaySound {
-        sound: String,
-        channel: String, // default is `main`
+        sound: CompactString,
+        channel: CompactString, // default is `main`
         /// How many seconds of fade-in between starting and becoming full
         /// volume
         fade_in: PosFloat,
@@ -129,14 +133,14 @@ pub(crate) enum SequenceElement {
         fade_out: PosFloat,
     },
     PlaySequence {
-        sequence: String
+        sequence: CompactString
     },
 }
 
 #[derive(Debug,PartialEq)]
 pub(crate) struct Sequence {
     // unique within a soundtrack
-    pub(crate) name: String,
+    pub(crate) name: CompactString,
     pub(crate) length: PosFloat,
     pub(crate) elements: Vec<(PosFloat, SequenceElement)>, // TODO make sure these are sorted
 }
@@ -167,29 +171,29 @@ pub(crate) enum Command {
     Wait(PosFloat),
     /// Start a Sound playing (even if another instance of that sound is
     /// already playing)
-    PlaySound(String),
+    PlaySound(CompactString),
     /// Acts like `PlaySound` followed by `Wait`, but the amount of waiting
     /// depends on the length of the named sound (information about which may
     /// not be available at parse time).
-    PlaySoundAndWait(String),
+    PlaySoundAndWait(CompactString),
     /// Start a Sequence playing (even if another instance of that sequence
     /// is already playing)
-    PlaySequence(String),
+    PlaySequence(CompactString),
     /// Acts like `PlaySequence` followed by `Wait`, but the amount of waiting
     /// depends on the length of the named sequence (information about which
     /// may not be available at parse time).
-    PlaySequenceAndWait(String),
+    PlaySequenceAndWait(CompactString),
     /// Cause another Node to start in parallel (iff not already playing)
-    StartNode(String),
+    StartNode(CompactString),
     /// Cause another Node to start in parallel (iff not already playing), or
     /// suddenly restart from the beginning (iff already playing)
-    RestartNode(String),
+    RestartNode(CompactString),
     /// As `RestartNode(the starting node)`
     RestartFlow,
     /// Cause another Node to fade out and go away (iff already playing)
-    FadeNodeOut(String, PosFloat),
+    FadeNodeOut(CompactString, PosFloat),
     /// Change a FlowControl to a new value.
-    Set(String, Vec<PredicateOp>),
+    Set(CompactString, Vec<PredicateOp>),
     /// If/else chain. **INTERMEDIATE PARSING STEP ONLY, MUST NOT OCCUR IN THE
     /// FINAL DATA**
     If {
@@ -208,7 +212,7 @@ pub(crate) enum Command {
 
 #[derive(Debug,PartialEq)]
 pub(crate) struct Node {
-    pub(crate) name: Option<String>,
+    pub(crate) name: Option<CompactString>,
     pub(crate) commands: Vec<Command>,
 }
 
@@ -221,9 +225,9 @@ impl Node {
 #[derive(Debug,PartialEq)]
 pub(crate) struct Flow {
     // unique within a soundtrack
-    pub(crate) name: String,
+    pub(crate) name: CompactString,
     pub(crate) start_node: Arc<Node>,
-    pub(crate) nodes: HashMap<String, Arc<Node>>,
+    pub(crate) nodes: HashMap<CompactString, Arc<Node>>,
 }
 
 impl Flow {
@@ -266,7 +270,7 @@ impl Flow {
         let mut indirects = Vec::with_capacity(soundtrack.sequences.len());
         found_sound = |sound_name: &str| {
             if !found_sounds.contains(sound_name) {
-                found_sounds.insert(sound_name.to_owned());
+                found_sounds.insert(sound_name.to_compact_string());
                 if !soundtrack.sounds.contains_key(sound_name) {
                     missing_sound(sound_name);
                 }
@@ -274,8 +278,8 @@ impl Flow {
         };
         found_sequence = |sequence_name: &str| {
             if !found_sequences.contains(sequence_name) {
-                found_sequences.insert(sequence_name.to_owned());
-                indirects.push(sequence_name.to_owned());
+                found_sequences.insert(sequence_name.to_compact_string());
+                indirects.push(sequence_name.to_compact_string());
                 if !soundtrack.sequences.contains_key(sequence_name) {
                     missing_sequence(sequence_name);
                 }
@@ -287,8 +291,8 @@ impl Flow {
             if let Some(sequence) = soundtrack.sequences.get(&indirects[n]) {
                 let mut found_sequence = |sequence_name: &str| {
                     if !found_sequences.contains(sequence_name) {
-                        found_sequences.insert(sequence_name.to_owned());
-                        indirects.push(sequence_name.to_owned());
+                        found_sequences.insert(sequence_name.to_compact_string());
+                        indirects.push(sequence_name.to_compact_string());
                         if !soundtrack.sequences.contains_key(sequence_name) {
                             missing_sequence(sequence_name);
                         }
@@ -305,7 +309,7 @@ impl Flow {
 #[derive(Debug,PartialEq)]
 pub(crate) enum PredicateOp {
     /// Push the value of the given `FlowControl`, empty string if unset.
-    PushVar(String),
+    PushVar(CompactString),
     /// Push the given value.
     PushConst(StringOrNumber),
     /// Pop two elements, push whether they're equal.

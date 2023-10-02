@@ -10,6 +10,7 @@ second-music-system = {version = "=0.1.0", path = "../second-music-system", feat
 libc = "*"
 paste = "1.0.14"
 function_name = "0.3.0"
+compact_str = "0.7.1"
 
 [lib]
 crate-type = ["cdylib"]

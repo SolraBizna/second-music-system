@@ -336,7 +336,7 @@ impl Sound {
             return Err(format!("line {}: sound element must have a name", node.lineno))
         }
         let mut timebases = timebases.make_child();
-        let name = node.items[1].clone();
+        let name = node.items[1].to_compact_string();
         let mut path = None;
         let mut stream = None;
         let mut data = HashMap::new();
@@ -368,7 +368,7 @@ impl Sound {
                     return Err(format!("line {}: this element's path contains a null character at position {}", child.lineno, index))
                 }
                 else {
-                    path = Some(child.items[1].clone());
+                    path = Some(child.items[1].to_compact_string());
                 }
             }
             else if child.items[0] == "timebase" {
@@ -424,7 +424,7 @@ impl Sound {
                 if let Some(index) = name.find(['\0']) {
                     return Err(format!("Sound {name:?} has a null character in its name at position {index} and no explicit path. If there is no explicit path, the name is used as the path, and the path is not allowed to have null characters in it. Either remove the null character from the name or add an explicit path."));
                 }
-                name.clone()
+                name.to_compact_string()
             }
         };
         let stream = stream.unwrap_or(false);
@@ -441,7 +441,7 @@ impl Sequence {
             return Err(format!("line {}: sequence element must have a name", node.lineno))
         }
         let mut timebases = timebases.make_child();
-        let name = node.items[1].clone();
+        let name = node.items[1].to_compact_string();
         let mut length = None;
         let mut elements = Vec::new();
         for child in node.children.iter() {
@@ -552,9 +552,8 @@ impl SequenceElement {
             }
         }
         let channel = match channel {
-            Some(x) => x,
-            // TODO: we really need to intern strings
-            None => "main".to_owned(),
+            Some(x) => x.to_compact_string(),
+            None => "main".to_compact_string(),
         };
         let start = match data.get("at") {
             Some(x) => *x,
@@ -583,8 +582,8 @@ impl SequenceElement {
             None => (length, PosFloat::ZERO),
         };
         match element_type {
-            "sound" => Ok((start, SequenceElement::PlaySound { sound: name.clone(), channel, fade_in, length, fade_out })),
-            "sequence" => Ok((start, SequenceElement::PlaySequence { sequence: name.clone() })),
+            "sound" => Ok((start, SequenceElement::PlaySound { sound: name.to_compact_string(), channel, fade_in, length, fade_out })),
+            "sequence" => Ok((start, SequenceElement::PlaySequence { sequence: name.to_compact_string() })),
             _ => unreachable!()
         }
     }
@@ -612,7 +611,7 @@ fn parse_flow_command_tokens(tokens: &[String], timebases: &TimebaseCollection) 
             let target = match tokens.get(2) {
                 Some(x) => x,
                 None => return Err(format!("next element after \"{}\" must be the name of the {} to play", token.unwrap(), token.unwrap())),
-            }.clone();
+            }.to_compact_string();
             let and_wait = if tokens.len() == 3 {
                 false
             }
@@ -633,10 +632,10 @@ fn parse_flow_command_tokens(tokens: &[String], timebases: &TimebaseCollection) 
         "start" | "restart" | "stop" => {
             match tokens.get(1).map(String::as_str) {
                 Some("node") => {
-                    let target = match tokens.get(2) { 
+                    let target = match tokens.get(2) {
                         Some(x) => x,
                         None => return Err(format!("next element after \"node\" must be the name of the node to {}", tokens[0])),
-                    }.clone();
+                    }.to_compact_string();
                     if tokens.len() != 3 {
                         return Err("nothing is allowed after the node name (do you need quotation marks?)".to_string())
                     };
@@ -672,7 +671,7 @@ fn parse_flow_command_tokens(tokens: &[String], timebases: &TimebaseCollection) 
             let target = match tokens.get(2) {
                 Some(x) => x,
                 None => return Err("next element after \"node\" must be the name of the node to fade".to_string()),
-            }.clone();
+            }.to_compact_string();
             if tokens.get(3).map(String::as_str) != Some("over") {
                 return Err("next element after node name must be \"over\"".to_string())
             }
@@ -683,7 +682,7 @@ fn parse_flow_command_tokens(tokens: &[String], timebases: &TimebaseCollection) 
             let target = match tokens.get(1) {
                 Some(x) => x,
                 None => return Err("next element after \"set\" must be the name of the flow control to set".to_string()),
-            }.clone();
+            }.to_compact_string();
             if tokens.get(2).map(String::as_str) != Some("to") {
                 return Err("next element after node name must be \"to\"".to_string())
             }
@@ -754,7 +753,7 @@ fn parse_if_body(node: &DinNode, rest: &[String], timebases: &TimebaseCollection
 
 /// Tentatively parse a `DinNode` that corresponds to a single command within
 /// a `Node`.
-/// 
+///
 /// - `Err(x)`: A parse error
 /// - `Ok(None)`: Unknown command
 /// - `Ok(Some(None))`: `else` or `else if` that successfully got folded into
@@ -830,20 +829,20 @@ impl Node {
         if din_node.items.len() != 2 {
             return Err(format!("line {}: node element must have a name", din_node.lineno))
         }
-        let name = din_node.items[1].clone();
+        let name = din_node.items[1].to_compact_string();
         let commands = parse_node_child_code(din_node, timebases)?;
         Ok(Node { name: Some(name), commands })
     }
 }
 
 impl Flow {
-    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection, flows: &HashMap<String, Arc<Flow>>) -> Result<Flow, String> {
+    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection, flows: &HashMap<CompactString, Arc<Flow>>) -> Result<Flow, String> {
         assert_eq!(node.items[0], "flow");
         if node.items.len() != 2 {
             return Err(format!("line {}: flow element must have a name", node.lineno))
         }
         let mut timebases = timebases.make_child();
-        let name = node.items[1].clone();
+        let name = node.items[1].to_compact_string();
         let mut nodes = flows.get(&name).map(|x| x.nodes.clone()).unwrap_or_else(|| { HashMap::new() });
         let mut start_node = Node::new();
         for child in node.children.iter() {

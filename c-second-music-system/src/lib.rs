@@ -9,6 +9,7 @@ use libc::{
     c_char, c_int, c_void, size_t,
     malloc, strlen
 };
+use compact_str::{CompactString, ToCompactString};
 
 mod commander;
 mod commands;
@@ -47,12 +48,12 @@ fn source_input_cstr(src: *const c_char) -> Result<&'static str, String> {
     source_input(src, len)
 }
 
-fn input(src: *const c_char, src_len: size_t) -> Result<String, String> {
+fn input(src: *const c_char, src_len: size_t) -> Result<CompactString, String> {
     let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len as usize) };
-    Ok(String::from_utf8_lossy(slice).to_string())
+    Ok(String::from_utf8_lossy(slice).to_compact_string())
 }
 
-fn input_cstr(src: *const c_char) -> Result<String, String> {
+fn input_cstr(src: *const c_char) -> Result<CompactString, String> {
     let len = unsafe { strlen(src) };
     input(src, len)
 }

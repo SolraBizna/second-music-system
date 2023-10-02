@@ -57,7 +57,7 @@ pub(crate) struct SoundMan<Runtime: TaskRuntime> {
     bufferman: BufferMan<Runtime>,
     streamman: StreamMan<Runtime>,
     delegate: Arc<dyn SoundDelegate>,
-    sound_infos: HashMap<String, SoundInfo>,
+    sound_infos: HashMap<CompactString, SoundInfo>,
     loading_rt: Arc<Runtime>,
 }
 

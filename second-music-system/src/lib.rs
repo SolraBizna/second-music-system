@@ -5,6 +5,7 @@ use std::{
 };
 
 use arcow::Arcow;
+use compact_str::{CompactString, ToCompactString};
 use crossbeam::channel::{Sender, Receiver, unbounded};
 use parking_lot::RwLock;
 
@@ -40,9 +41,9 @@ pub use runtime::*;
 /// incrementally, or replaced entirely, cleanly and efficiently.
 #[derive(Clone, Debug)]
 pub struct Soundtrack {
-    flows: Arcow<HashMap<String, Arc<Flow>>>,
-    sequences: Arcow<HashMap<String, Arc<Sequence>>>,
-    sounds: Arcow<HashMap<String, Arc<Sound>>>,
+    flows: Arcow<HashMap<CompactString, Arc<Flow>>>,
+    sequences: Arcow<HashMap<CompactString, Arc<Sequence>>>,
+    sounds: Arcow<HashMap<CompactString, Arc<Sound>>>,
 }
 
 impl Soundtrack {

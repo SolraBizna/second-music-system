@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 arcow = "1.1"
+compact_str = "0.7.1"
 crossbeam = "0.8"
 derivative = "2.2"
 libsoxr = "0.2.9"

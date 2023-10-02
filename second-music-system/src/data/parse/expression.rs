@@ -122,7 +122,7 @@ fn parse_partial<'a>(it: &mut std::vec::IntoIter<&'a str>, top_level: bool) -> R
             match (op, second) {
                 ("$", ExprNode::StringOrNumber(StringOrNumber::String(str))) => {
                     partial.insert(n, ExprNode::Subexpression(vec![
-                        PredicateOp::PushVar(str)   
+                        PredicateOp::PushVar(str)
                     ]));
                 },
                 ("$", _) => {

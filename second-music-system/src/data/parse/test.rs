@@ -24,8 +24,8 @@ use super::*;
     assert_eq!(
         Sound::parse_din_node(&node, &timebases).unwrap(),
         Sound {
-            name: "test1.mp3".to_string(),
-            path: "test1.mp3".to_string(),
+            name: "test1.mp3".to_compact_string(),
+            path: "test1.mp3".to_compact_string(),
             start: PosFloat::ZERO,
             end: PosFloat::new_clamped(32.0),
             stream: false,
@@ -40,8 +40,8 @@ sound test1.mp3
     assert_eq!(soundtrack.sounds.len(), 1);
     assert_eq!(**soundtrack.sounds.get("test1.mp3").unwrap(),
     Sound {
-        name: "test1.mp3".to_string(),
-        path: "test1.mp3".to_string(),
+        name: "test1.mp3".to_compact_string(),
+        path: "test1.mp3".to_compact_string(),
         start: PosFloat::ZERO,
         end: PosFloat::new_clamped(32.0),
         stream: false,
@@ -87,7 +87,7 @@ fn sound_with_null_name_explicit_nonnull_path_parse() {
     assert_eq!(
         Sequence::parse_din_node(&node, &timebases).unwrap(),
         Sequence {
-            name: "test1".to_string(),
+            name: "test1".to_compact_string(),
             length: PosFloat::new_clamped(32.0),
             elements: vec![],
         }
@@ -118,7 +118,7 @@ sequence test1
     assert_eq!(
         sequence_one,
         Sequence {
-            name: "test1".to_string(),
+            name: "test1".to_compact_string(),
             length: PosFloat::new_clamped(32.0),
             elements: vec![],
         }
@@ -126,11 +126,11 @@ sequence test1
     assert_eq!(
         sequence_two,
         Sequence {
-            name: "test2".to_string(),
+            name: "test2".to_compact_string(),
             length: PosFloat::new_clamped(64.0),
             elements: vec![
-                (PosFloat::new_clamped(32.0), SequenceElement::PlaySequence { 
-                    sequence: "test1".to_string() 
+                (PosFloat::new_clamped(32.0), SequenceElement::PlaySequence {
+                    sequence: "test1".to_compact_string()
                 }),
             ],
         }
@@ -150,15 +150,15 @@ sequence test2
     assert_eq!(soundtrack.sequences.len(), 2);
     assert_eq!(**soundtrack.sequences.get("test1").unwrap(),
         Sequence {
-            name: "test1".to_string(),
+            name: "test1".to_compact_string(),
             length: PosFloat::new_clamped(32.0),
             elements: vec![],
         });
     assert_eq!(**soundtrack.sequences.get("test2").unwrap(),
     Sequence {
-        name: "test2".to_string(),
+        name: "test2".to_compact_string(),
         length: PosFloat::new_clamped(64.0),
-        elements: vec![(PosFloat::new_clamped(32.0), SequenceElement::PlaySequence { sequence: "test1".to_string() })],
+        elements: vec![(PosFloat::new_clamped(32.0), SequenceElement::PlaySequence { sequence: "test1".to_compact_string() })],
     });
     assert_eq!(soundtrack.flows.len(), 0);
 }
@@ -166,9 +166,9 @@ sequence test2
 fn invalid_sequence_element_parse() {
     let invalid_parameters = [
         r#"length"#,
-        r#"for"#, 
-        r#"until"#, 
-        r#"fade_in"#, 
+        r#"for"#,
+        r#"until"#,
+        r#"fade_in"#,
         r#"fade_out"#,
     ];
     for parameter in invalid_parameters {
@@ -195,9 +195,9 @@ flow test_flow1
     assert_eq!(soundtrack.flows.len(), 1);
     let start_node = Arc::new(Node::new());
     let nodes = HashMap::new();
-    assert_eq!(**soundtrack.flows.get("test_flow1").unwrap(), 
+    assert_eq!(**soundtrack.flows.get("test_flow1").unwrap(),
         Flow {
-            name: "test_flow1".to_string(),
+            name: "test_flow1".to_compact_string(),
             start_node,
             nodes,
         });
@@ -228,14 +228,14 @@ flow test_flow1
     assert_eq!(soundtrack.flows.len(), 1);
     let start_node = Arc::new(Node::new());
     let mut nodes = HashMap::new();
-    nodes.insert("test_node1".to_string(), 
-        Arc::new(Node { 
-            name: Some("test_node1".to_string()), 
-            commands: vec![Command::PlaySequence("test_sequence1".to_string())] 
+    nodes.insert("test_node1".to_compact_string(),
+        Arc::new(Node {
+            name: Some("test_node1".to_compact_string()),
+            commands: vec![Command::PlaySequence("test_sequence1".to_compact_string())]
         }));
-    assert_eq!(**soundtrack.flows.get("test_flow1").unwrap(), 
+    assert_eq!(**soundtrack.flows.get("test_flow1").unwrap(),
         Flow {
-            name: "test_flow1".to_string(),
+            name: "test_flow1".to_compact_string(),
             start_node,
             nodes,
         });
@@ -253,14 +253,14 @@ flow test_flow1
     assert_eq!(
         Sequence::parse_din_node(&node, &timebases).unwrap(),
         Sequence {
-            name: "test1".to_string(),
+            name: "test1".to_compact_string(),
             length: PosFloat::new_clamped(32.0),
             elements: vec![
-                (PosFloat::ZERO, SequenceElement::PlaySound { 
-                    sound: format!("test_sound"), 
-                    channel: format!("main"), 
-                    fade_in: PosFloat::ZERO, 
-                    length: Some(PosFloat::new_clamped(12.0)), 
+                (PosFloat::ZERO, SequenceElement::PlaySound {
+                    sound: CompactString::new("test_sound"),
+                    channel: CompactString::new("main"),
+                    fade_in: PosFloat::ZERO,
+                    length: Some(PosFloat::new_clamped(12.0)),
                     fade_out: PosFloat::new_clamped(4.0),
                 })
             ],
@@ -271,7 +271,6 @@ flow test_flow1
 #[test] #[should_panic] fn missingthen() {
     let toks = vec!["dennis".to_string()];
     parse_condition(&toks).unwrap();
-
 }
 
 #[test] fn expression_parsing() {
