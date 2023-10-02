@@ -192,7 +192,7 @@ impl Timebase {
         let mut ret = PosFloat::ZERO;
         for (i, stage) in self.stages.iter().enumerate() {
             let last = i+1 == self.stages.len();
-            let mut raw = if last {
+            let raw = if last {
                 // Parse the rest of the specifier as a f32
                 match specifier.parse::<PosFloat>() {
                     Ok(x) => x,

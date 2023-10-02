@@ -7,7 +7,7 @@ use std::{
     str::FromStr,
 };
 
-use super::{SoundDelegate, SpeakerLayout};
+use super::SpeakerLayout;
 
 #[derive(Clone, Copy, PartialEq)]
 /// A finite, positive f32.

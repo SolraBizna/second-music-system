@@ -897,7 +897,6 @@ impl Engine {
                         seen_flows: &mut seen_flows,
                         seen_nodes: &mut seen_nodes,
                     });
-                drop(buf);
                 out = &mut out[buf_len..];
             }
         }

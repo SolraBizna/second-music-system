@@ -1,16 +1,11 @@
-use std::{
-    num::NonZeroUsize,
-    time::Duration,
-};
+use std::num::NonZeroUsize;
 
 use super::*;
 
-use switchyard::{Switchyard, threads::{ThreadAllocationInput, one_to_one, single_thread}};
-
 mod buffer;
-pub use buffer::*;
+use buffer::*;
 mod stream;
-pub use stream::*;
+use stream::*;
 
 pub(crate) trait SoundManSubtype<Runtime: TaskRuntime> {
     /// Load the given sound. Recursive; call `load` N times, and you have to
