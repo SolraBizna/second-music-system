@@ -103,7 +103,7 @@ fn iterate_din_parser() {
     end!(),
     ];
     let collected = collected.unwrap();
-    if &collected[..] != &desired[..] {
+    if collected[..] != desired[..] {
         let mut lefts = collected.iter();
         let mut rights = desired.iter();
         loop {

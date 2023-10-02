@@ -1,10 +1,10 @@
 use super::*;
 
 /// The loop adapter serves two purposes:
-/// 
+///
 /// 1. Applying fade in, playback length, and fade out to a Sound
 /// 2. Possibly, converting the stream from its native format to f32
-/// 
+///
 /// note: this struct deals in samples, NOT sample frames!
 struct FadeAdapter<T: Sample> {
     source_stream: Box<dyn SoundReader<T>>,
@@ -25,7 +25,7 @@ struct FadeAdapter<T: Sample> {
 }
 
 impl<T: Sample> FadeAdapter<T> {
-    fn new(
+    fn new_boxed(
         sound: &Sound,
         fade_in: PosFloat,
         how_long_to_play_before_fade: Option<PosFloat>,
@@ -188,10 +188,10 @@ pub(crate) fn new_fade_adapter(
     let FormattedSoundStream { sample_rate, speaker_layout, reader }
         = stream;
     match reader {
-        FormattedSoundReader::U8(x) => FadeAdapter::new(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
-        FormattedSoundReader::U16(x) => FadeAdapter::new(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
-        FormattedSoundReader::I8(x) => FadeAdapter::new(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
-        FormattedSoundReader::I16(x) => FadeAdapter::new(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
-        FormattedSoundReader::F32(x) => FadeAdapter::new(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
+        FormattedSoundReader::U8(x) => FadeAdapter::new_boxed(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
+        FormattedSoundReader::U16(x) => FadeAdapter::new_boxed(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
+        FormattedSoundReader::I8(x) => FadeAdapter::new_boxed(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
+        FormattedSoundReader::I16(x) => FadeAdapter::new_boxed(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
+        FormattedSoundReader::F32(x) => FadeAdapter::new_boxed(sound, fade_in, length, fade_out, sample_rate, speaker_layout, x),
     }
 }

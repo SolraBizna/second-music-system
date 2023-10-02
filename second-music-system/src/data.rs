@@ -302,7 +302,7 @@ impl Flow {
             }
             n += 1;
         }
-        found_sounds.into_iter().filter_map(|k| soundtrack.sounds.get(&k).map(|x| x.clone())).collect()
+        found_sounds.into_iter().filter_map(|k| soundtrack.sounds.get(&k).cloned()).collect()
     }
 }
 

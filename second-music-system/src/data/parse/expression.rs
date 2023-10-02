@@ -27,7 +27,7 @@ impl ExprNode<'_> {
 // 6: and
 // 7: or
 
-fn parse_partial<'a>(it: &mut std::vec::IntoIter<&'a str>, top_level: bool) -> Result<Vec<PredicateOp>, String> {
+fn parse_partial(it: &mut std::vec::IntoIter<&str>, top_level: bool) -> Result<Vec<PredicateOp>, String> {
     let mut partial = Vec::new();
     loop {
         let x = it.next();
@@ -94,7 +94,7 @@ fn parse_partial<'a>(it: &mut std::vec::IntoIter<&'a str>, top_level: bool) -> R
             },
         }
     }
-    if partial.len() == 0 {
+    if partial.is_empty() {
         return Err("an expression or subexpression must not be empty".to_string())
     }
     // Check for attempts to "do$this"
@@ -254,7 +254,7 @@ pub(super) fn parse_condition(tokens: &[String]) -> Result<(Vec<PredicateOp>, &[
     let then_pos = match tokens.iter().position(|x| x == "then") {
         Some(x) => x,
         None => {
-            if tokens.iter().position(|x| x.ends_with("then")).is_some() {
+            if tokens.iter().any(|x| x.ends_with("then")) {
                 return Err("\"then\" must be cleanly separated from the condition (try adding a space)".to_string())
             }
             else {

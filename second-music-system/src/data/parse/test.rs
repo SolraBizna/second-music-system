@@ -2,7 +2,7 @@ use super::*;
 
 #[test] fn timebase_parse() {
     assert_eq!(
-        Timebase::parse_source(&vec![
+        Timebase::parse_source(&[
             "@4".to_string(),
             "120/m".to_string(),
             "32".to_string(),
@@ -329,7 +329,7 @@ flow test_flow1
         "+", "-", "*", "/", "//", "%", "^", "atan2", "min", "max",
     ];
     for op in BINARY_OPS.iter() {
-        bads.push(format!("{}", op));
+        bads.push(op.to_string());
         bads.push(format!("{} b", op));
         bads.push(format!("a {}", op));
         if *op != "/" && *op != "==" {

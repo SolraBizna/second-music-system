@@ -617,7 +617,7 @@ impl Engine {
             (0..num_threads).map(|i| ThreadAllocationOutput {
                 name: Some(format!("SMSworker{i}")),
                 ident: i,
-                stack_size: Some(1 * 1024 * 1024),
+                stack_size: Some(1024 * 1024),
                 affinity: Some((i+affinity)%num_logical_cores),
             }),
             || (),
@@ -700,7 +700,7 @@ impl Engine {
         // TODO: slim this, Bloom filter?
         let mut seen_flows = HashSet::with_capacity(self.active_flow_nodes.len()*2);
         let mut seen_nodes = HashSet::with_capacity(self.active_flow_nodes.len()*2);
-        while out.len() > 0 {
+        while !out.is_empty() {
             let now = self.mixer.get_next_output_sample_frame_number();
             // Here, at this command boundary, evaluate any commands we might
             // have received.
@@ -743,10 +743,10 @@ impl Engine {
                             break;
                         },
                         Command::PlaySound(sound_name) => {
-                            Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(CompactString::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, PosFloat::ZERO, None, PosFloat::ZERO);
+                            Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(CompactString::as_str), sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, PosFloat::ZERO, None, PosFloat::ZERO);
                         },
                         Command::PlaySoundAndWait(sound_name) => {
-                            let sleep_time = Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(CompactString::as_str), &sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, PosFloat::ZERO, None, PosFloat::ZERO);
+                            let sleep_time = Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(CompactString::as_str), sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, PosFloat::ZERO, None, PosFloat::ZERO);
                             active_node.next_instruction_time = now + sleep_time;
                             break;
                         },
@@ -875,7 +875,7 @@ impl Engine {
             // Consume queued sounds whose times have come
             while self.queued_sounds.peek().map(|x| x.when <= now).unwrap_or(false) {
                 let queued_sound = self.queued_sounds.pop().unwrap();
-                if let Some(adapter) = adaptify(&self.sound_delegate, self.soundman.as_mut(), &*queued_sound.sound, queued_sound.fade_in, queued_sound.length, queued_sound.fade_out, self.sample_rate, self.speaker_layout) {
+                if let Some(adapter) = adaptify(&self.sound_delegate, self.soundman.as_mut(), &queued_sound.sound, queued_sound.fade_in, queued_sound.length, queued_sound.fade_out, self.sample_rate, self.speaker_layout) {
                     self.mixer.play(adapter, queued_sound.who);
                 }
             }
@@ -978,21 +978,18 @@ impl Engine {
                 load_status.active_loading = false;
                 load_status.maybe_unload(&self.live_soundtrack, self.soundman.as_mut());
                 self.node_volumes.retain(|node_id, _| {
-                    &node_id.0 != k
+                    node_id.0 != k
                 });
                 self.active_flow_nodes.retain(|afn| {
-                    &afn.flow_name != k
+                    afn.flow_name != k
                 });
                 false
             }
         });
         self.node_volumes.retain(|k, _| {
-            if seen_nodes.contains(k) { true }
-            else if self.starting_flows.contains(&k.0) { true }
-            else if self.active_flow_nodes.iter().any(|afn| afn.flow_name == k.0 && afn.node.name.as_ref() == k.1.as_ref()) {
-                true
-            }
-            else { false }
+            seen_nodes.contains(k)
+            || self.starting_flows.contains(&k.0)
+            || self.active_flow_nodes.iter().any(|afn| afn.flow_name == k.0 && afn.node.name.as_ref() == k.1.as_ref())
         });
         self.mix_controls.retain(|k, fader| {
             fader.evaluate() != PosFloat::ONE || !self.mix_controls_fading_out.contains(k)
@@ -1028,6 +1025,7 @@ impl Engine {
     }
     /// Start a sequence being played. Returns the number of *sample frames*
     /// this sequence will last.
+    #[allow(clippy::too_many_arguments)] // (internal function, doesn't care)
     fn execute_sequence(
         soundtrack: &Soundtrack,
         sample_rate: PosFloat,
@@ -1056,7 +1054,7 @@ impl Engine {
                         SequenceElement::PlaySound {
                             sound, channel, fade_in, length, fade_out,
                         } => {
-                            Engine::execute_sound(soundtrack, sample_rate, when, flow_name, node_name, &sound, sound_delegate, queued_sounds, channel, *fade_in, *length, *fade_out);
+                            Engine::execute_sound(soundtrack, sample_rate, when, flow_name, node_name, sound, sound_delegate, queued_sounds, channel, *fade_in, *length, *fade_out);
                         }
                     }
                 }
@@ -1066,6 +1064,7 @@ impl Engine {
     }
     /// Queues a sound to be played. Returns the number of *sample frames* this
     /// sound will last.
+    #[allow(clippy::too_many_arguments)] // (internal function, doesn't care)
     fn execute_sound(
         soundtrack: &Soundtrack,
         sample_rate: PosFloat,
@@ -1465,17 +1464,17 @@ impl FlowLoadStatus {
             return true
         }
         for sound in self.known_sounds.iter() {
-            if !soundman.is_ready(&**sound) {
+            if !soundman.is_ready(sound) {
                 return false
             }
         }
         self.known_all_ready = true;
-        return true
+        true
     }
     fn maybe_unload(&mut self, _live_soundtrack: &Soundtrack, soundman: &mut dyn GenericSoundMan) {
         if !self.load_requested || self.should_be_loaded() { return }
         for sound in self.known_sounds.iter() {
-            soundman.unload(&*sound);
+            soundman.unload(sound);
         }
         self.load_requested = false;
         self.known_all_ready = false;
@@ -1483,7 +1482,7 @@ impl FlowLoadStatus {
     fn maybe_load(&mut self, _live_soundtrack: &Soundtrack, soundman: &mut dyn GenericSoundMan) {
         if self.load_requested || !self.should_be_loaded() { return }
         for sound in self.known_sounds.iter() {
-            soundman.load(&*sound);
+            soundman.load(sound);
         }
         self.load_requested = true;
     }

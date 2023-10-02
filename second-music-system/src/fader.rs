@@ -1,7 +1,7 @@
 use crate::PosFloat;
 
 /// Specifies what kind of curve to use in a fade.
-/// 
+///
 /// Logarithmic fades will have (roughly) the same perceived volume change per
 /// unit time. Linear fades will seem to speed up or slow down over the course
 /// of the fade, and should be used when "intermixing" related tracks.
@@ -40,7 +40,7 @@ const SILENT_LOG: f32 = -11.1;
 /// This value is equivalent to a volume level of about -96.3dB, and also the
 /// ratio of the smallest non-zero voltage to the largest non-zero voltage that
 /// a 16-bit DAC will output.
-const SILENT_EXP: f32 = 1.0000152589055;
+const SILENT_EXP: f32 = 1.0000152;
 
 impl FadeCurve {
     pub fn from(typ: FadeType, from: PosFloat, to: PosFloat, length: PosFloat) -> FadeCurve {
@@ -130,7 +130,7 @@ impl Fader {
     pub fn start(typ: FadeType, from: PosFloat, to: PosFloat, length: PosFloat) -> Fader {
         Fader {
             curve: FadeCurve::from(typ, from, to, length), to,
-            length: length, pos: PosFloat::ZERO,
+            length, pos: PosFloat::ZERO,
         }
     }
     /// As `start`, but returns `None` if the given length is infinite, zero,
@@ -194,7 +194,6 @@ impl Iterator for Fader {
         (size, Some(size))
     }
     fn count(self) -> usize {
-        let size = (self.length.ceil() - *self.pos) as usize;
-        size
+        (self.length.ceil() - *self.pos) as usize
     }
 }

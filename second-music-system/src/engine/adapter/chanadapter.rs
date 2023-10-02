@@ -1,6 +1,10 @@
 //! The channel adapter takes in a stream with one speaker layout, and outputs
 //! a stream with a different speaker layout.
 
+// some of the macros check buffer length against channel count, this prevents
+// Clippy from getting mad when the channel count is 1
+#![allow(clippy::modulo_one)]
+
 use super::*;
 
 #[macro_use] mod macros;
@@ -193,72 +197,72 @@ pub(crate) fn new_channel_adapter(in_stream: Box<dyn SoundReader<f32>>, sample_r
         // Mono source
         (SpeakerLayout::Mono, SpeakerLayout::Mono) => in_stream,
         (SpeakerLayout::Mono, SpeakerLayout::Stereo)
-            => MonoToStereo::new(sample_rate, in_stream),
+            => MonoToStereo::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Mono, SpeakerLayout::Headphones)
-            => MonoToHeadphones::new(sample_rate, in_stream),
+            => MonoToHeadphones::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Mono, SpeakerLayout::Quadraphonic)
-            => MonoToQuadraphonic::new(sample_rate, in_stream),
+            => MonoToQuadraphonic::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Mono, SpeakerLayout::Surround51)
-            => MonoToSurround51::new(sample_rate, in_stream),
+            => MonoToSurround51::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Mono, SpeakerLayout::Surround71)
-            => MonoToSurround71::new(sample_rate, in_stream),
+            => MonoToSurround71::new_boxed(sample_rate, in_stream),
         // Stereo source
         (SpeakerLayout::Stereo, SpeakerLayout::Mono)
-            => StereoToMono::new(sample_rate, in_stream),
+            => StereoToMono::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Stereo, SpeakerLayout::Stereo) => in_stream,
         (SpeakerLayout::Stereo, SpeakerLayout::Headphones) => in_stream,
         (SpeakerLayout::Stereo, SpeakerLayout::Quadraphonic)
-            => StereoToQuadraphonic::new(sample_rate, in_stream),
+            => StereoToQuadraphonic::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Stereo, SpeakerLayout::Surround51)
-            => StereoToSurround51::new(sample_rate, in_stream),
+            => StereoToSurround51::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Stereo, SpeakerLayout::Surround71)
-            => StereoToSurround71::new(sample_rate, in_stream),
+            => StereoToSurround71::new_boxed(sample_rate, in_stream),
         // Headphone source
         (SpeakerLayout::Headphones, SpeakerLayout::Mono)
-            => HeadphonesToMono::new(sample_rate, in_stream),
+            => HeadphonesToMono::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Headphones, SpeakerLayout::Stereo) => in_stream,
         (SpeakerLayout::Headphones, SpeakerLayout::Headphones) => in_stream,
         (SpeakerLayout::Headphones, SpeakerLayout::Quadraphonic)
-            => HeadphonesToQuadraphonic::new(sample_rate, in_stream),
+            => HeadphonesToQuadraphonic::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Headphones, SpeakerLayout::Surround51)
-            => HeadphonesToSurround51::new(sample_rate, in_stream),
+            => HeadphonesToSurround51::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Headphones, SpeakerLayout::Surround71)
-            => HeadphonesToSurround71::new(sample_rate, in_stream),
+            => HeadphonesToSurround71::new_boxed(sample_rate, in_stream),
         // Quadraphonic source
         (SpeakerLayout::Quadraphonic, SpeakerLayout::Mono)
-            => QuadraphonicToMono::new(sample_rate, in_stream),
+            => QuadraphonicToMono::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Quadraphonic, SpeakerLayout::Stereo)
-            => QuadraphonicToStereo::new(sample_rate, in_stream),
+            => QuadraphonicToStereo::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Quadraphonic, SpeakerLayout::Headphones)
-            => QuadraphonicToHeadphones::new(sample_rate, in_stream),
+            => QuadraphonicToHeadphones::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Quadraphonic, SpeakerLayout::Quadraphonic) => in_stream,
         (SpeakerLayout::Quadraphonic, SpeakerLayout::Surround51)
-            => QuadraphonicToSurround51::new(sample_rate, in_stream),
+            => QuadraphonicToSurround51::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Quadraphonic, SpeakerLayout::Surround71)
-            => QuadraphonicToSurround71::new(sample_rate, in_stream),
+            => QuadraphonicToSurround71::new_boxed(sample_rate, in_stream),
         // Surround 5.1 source
         (SpeakerLayout::Surround51, SpeakerLayout::Mono)
-            => Surround51ToMono::new(sample_rate, in_stream),
+            => Surround51ToMono::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround51, SpeakerLayout::Stereo)
-            => Surround51ToStereo::new(sample_rate, in_stream),
+            => Surround51ToStereo::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround51, SpeakerLayout::Headphones)
-            => Surround51ToHeadphones::new(sample_rate, in_stream),
+            => Surround51ToHeadphones::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround51, SpeakerLayout::Quadraphonic)
-            => Surround51ToQuadraphonic::new(sample_rate, in_stream),
+            => Surround51ToQuadraphonic::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround51, SpeakerLayout::Surround51) => in_stream,
         (SpeakerLayout::Surround51, SpeakerLayout::Surround71)
-            => Surround51ToSurround71::new(sample_rate, in_stream),
+            => Surround51ToSurround71::new_boxed(sample_rate, in_stream),
         // Surround 7.1 source
         (SpeakerLayout::Surround71, SpeakerLayout::Mono)
-            => Surround71ToMono::new(sample_rate, in_stream),
+            => Surround71ToMono::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround71, SpeakerLayout::Stereo)
-            => Surround71ToStereo::new(sample_rate, in_stream),
+            => Surround71ToStereo::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround71, SpeakerLayout::Headphones)
-            => Surround71ToHeadphones::new(sample_rate, in_stream),
+            => Surround71ToHeadphones::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround71, SpeakerLayout::Quadraphonic)
-            => Surround71ToQuadraphonic::new(sample_rate, in_stream),
+            => Surround71ToQuadraphonic::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround71, SpeakerLayout::Surround51)
-            => Surround71ToSurround51::new(sample_rate, in_stream),
+            => Surround71ToSurround51::new_boxed(sample_rate, in_stream),
         (SpeakerLayout::Surround71, SpeakerLayout::Surround71) => in_stream,
     }
 }
@@ -291,8 +295,8 @@ mod test {
         let mut bawk = [MaybeUninit::uninit(); 1000];
         assert_eq!(adapted.read(&mut bawk[..]), bawk.len());
         let bawk: [f32; 1000] = unsafe { std::mem::transmute(bawk) };
-        for n in 0 .. bawk.len() {
-            assert_eq!(bawk[n], ((n/2) as f32).sin());
+        for (n, e) in bawk.iter().enumerate() {
+            assert_eq!(*e, ((n/2) as f32).sin());
         }
     }
 }

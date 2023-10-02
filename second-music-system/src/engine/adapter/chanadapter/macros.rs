@@ -18,7 +18,7 @@ macro_rules! make_downmixer {
         impl $name {
             const NUM_IN_CHANNELS: usize = count!($($in_channel),*);
             const NUM_OUT_CHANNELS: usize = count!($($out_channel),*);
-            pub(crate) fn new(_sample_rate: PosFloat, inner: Box<dyn SoundReader<f32>>) -> Box<dyn SoundReader<f32>> {
+            pub(crate) fn new_boxed(_sample_rate: PosFloat, inner: Box<dyn SoundReader<f32>>) -> Box<dyn SoundReader<f32>> {
                 Box::new($name {
                     buf: vec![],
                     inner,
@@ -82,7 +82,7 @@ macro_rules! make_upmixer {
         impl $name {
             const NUM_IN_CHANNELS: usize = count!($($in_channel),*);
             const NUM_OUT_CHANNELS: usize = count!($($out_channel),*);
-            pub(crate) fn new(_sample_rate: PosFloat, inner: Box<dyn SoundReader<f32>>) -> Box<dyn SoundReader<f32>> {
+            pub(crate) fn new_boxed(_sample_rate: PosFloat, inner: Box<dyn SoundReader<f32>>) -> Box<dyn SoundReader<f32>> {
                 Box::new($name {
                     inner,
                 })

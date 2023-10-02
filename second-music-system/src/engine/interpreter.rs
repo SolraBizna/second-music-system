@@ -30,7 +30,7 @@ pub(crate) fn evaluate(flow_controls: &HashMap<CompactString, StringOrNumber>,
     for op in ops.iter() {
         use PredicateOp::*;
         match op {
-            PushVar(x) => stack.push(flow_controls.get(x).cloned().unwrap_or_else(StringOrNumber::default)),
+            PushVar(x) => stack.push(flow_controls.get(x).cloned().unwrap_or_default()),
             PushConst(x) => stack.push(x.clone()),
             Eq => op!(stack, |a, b| a == b),
             NotEq => op!(stack, |a, b| a != b),

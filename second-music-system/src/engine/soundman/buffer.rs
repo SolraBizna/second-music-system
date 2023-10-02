@@ -58,11 +58,11 @@ impl WeakFormattedVec {
     }
     fn upgrade(&self) -> Option<FormattedVec> {
         match self {
-            WeakFormattedVec::U8(x) => x.upgrade().map(|x| FormattedVec::U8(x)),
-            WeakFormattedVec::U16(x) => x.upgrade().map(|x| FormattedVec::U16(x)),
-            WeakFormattedVec::I8(x) => x.upgrade().map(|x| FormattedVec::I8(x)),
-            WeakFormattedVec::I16(x) => x.upgrade().map(|x| FormattedVec::I16(x)),
-            WeakFormattedVec::F32(x) => x.upgrade().map(|x| FormattedVec::F32(x)),
+            WeakFormattedVec::U8(x) => x.upgrade().map(FormattedVec::U8),
+            WeakFormattedVec::U16(x) => x.upgrade().map(FormattedVec::U16),
+            WeakFormattedVec::I8(x) => x.upgrade().map(FormattedVec::I8),
+            WeakFormattedVec::I16(x) => x.upgrade().map(FormattedVec::I16),
+            WeakFormattedVec::F32(x) => x.upgrade().map(FormattedVec::F32),
         }
     }
 }
@@ -79,35 +79,35 @@ impl Format {
 enum CachedSound {
     /// A sound that hasn't been loaded yet, but whose loading has been
     /// requested.
-    LoadingSound { rx: channel::Receiver<(Format, FormattedVec)>, load_count: u32 },
+    Loading { rx: channel::Receiver<(Format, FormattedVec)>, load_count: u32 },
     /// A sound that has been loaded, and is currently being actively cached.
-    LoadedSound { format: Format, vec: FormattedVec, load_count: u32 },
+    Loaded { format: Format, vec: FormattedVec, load_count: u32 },
     /// A sound that was previously loaded, but whose load count has gone to
     /// zero, and which will get purged if no active playback requires it.
-    UnloadedSound { format: Format, vec: WeakFormattedVec },
+    Unloaded { format: Format, vec: WeakFormattedVec },
 }
 
 impl CachedSound {
     /// If we are a `LoadingSound`, check if we should actually become a
     /// `LoadedSound` instead. If so, mutate.
     fn check_loading(&mut self, delegate: &Arc<dyn SoundDelegate>, name: &str) {
-        if let CachedSound::LoadingSound { load_count, rx } = self {
+        if let CachedSound::Loading { load_count, rx } = self {
             match rx.try_recv() {
                 Ok((format, vec)) if *load_count > 0 => {
-                    *self = CachedSound::LoadedSound { load_count: *load_count, format, vec };
+                    *self = CachedSound::Loaded { load_count: *load_count, format, vec };
                 },
                 Ok(_) if *load_count == 0 => {
                     // Great, thanks for loading! But we don't want you anymore
                     // (it makes no sense to put it straight in as a weak vec,
                     // because it would immediately be freed)
-                    *self = CachedSound::UnloadedSound { format: Format::default(), vec: WeakFormattedVec::default() }
+                    *self = CachedSound::Unloaded { format: Format::default(), vec: WeakFormattedVec::default() }
                 },
                 Err(channel::TryRecvError::Empty) => {
                     // nothing to do right now
                 }
                 _ => {
                     delegate.warning(&format!("Background loading sound {:?} failed", name));
-                    *self = CachedSound::LoadedSound { load_count: *load_count, format: Format::default(), vec: FormattedVec::default() };
+                    *self = CachedSound::Loaded { load_count: *load_count, format: Format::default(), vec: FormattedVec::default() };
                 },
             }
         }
@@ -127,13 +127,13 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for BufferMan<Runtime> {
         if let Some(ent) = self.sounds.get_mut(sound) {
             ent.check_loading(&self.delegate, sound);
             match ent {
-                CachedSound::LoadingSound { load_count, .. } | CachedSound::LoadedSound { load_count, .. } => {
+                CachedSound::Loading { load_count, .. } | CachedSound::Loaded { load_count, .. } => {
                     *load_count += 1;
                     return;
                 },
-                CachedSound::UnloadedSound { format, vec } => {
+                CachedSound::Unloaded { format, vec } => {
                     if let Some(vec) = vec.upgrade() {
-                        *ent = CachedSound::LoadedSound { load_count: 1, format: format.clone(), vec };
+                        *ent = CachedSound::Loaded { load_count: 1, format: format.clone(), vec };
                         return;
                     }
                 },
@@ -149,19 +149,19 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for BufferMan<Runtime> {
             let _ = result_tx.send(load_whole_sound(&delegate, &sound_clone));
         });
         self.sounds.insert(sound.to_string(),
-            CachedSound::LoadingSound {
+            CachedSound::Loading {
                 load_count: 1,
                 rx: result_rx,
         });
     }
     fn unload(&mut self, sound: &str, _start: PosFloat) -> bool {
         match self.sounds.get_mut(sound) {
-            None | Some(CachedSound::UnloadedSound { .. }) => {
+            None | Some(CachedSound::Unloaded { .. }) => {
                 self.delegate.warning(&format!("unbalanced unload of sound {:?} (THIS IS A BUG IN SMS!)", sound));
                 true
             },
             Some(x) => match x {
-                CachedSound::LoadingSound { load_count, .. } => {
+                CachedSound::Loading { load_count, .. } => {
                     if *load_count > 0 {
                         *load_count -= 1;
                     }
@@ -170,20 +170,20 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for BufferMan<Runtime> {
                     }
                     *load_count == 0
                 },
-                CachedSound::LoadedSound { load_count, format, vec } => {
+                CachedSound::Loaded { load_count, format, vec } => {
                     if *load_count > 1 {
                         *load_count -= 1;
                         false
                     }
                     else {
-                        *x = CachedSound::UnloadedSound {
+                        *x = CachedSound::Unloaded {
                             format: format.clone(),
                             vec: vec.downgrade(),
                         };
                         true
                     }
                 },
-                CachedSound::UnloadedSound { .. } => unreachable!(),
+                CachedSound::Unloaded { .. } => unreachable!(),
             },
         }
     }
@@ -193,7 +193,7 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for BufferMan<Runtime> {
     fn is_ready(&mut self, sound: &str, _start: PosFloat) -> bool {
         if let Some(x) = self.sounds.get_mut(sound) {
             x.check_loading(&self.delegate, sound);
-            if let CachedSound::LoadedSound { .. } = x {
+            if let CachedSound::Loaded { .. } = x {
                 return true
             }
         }
@@ -208,18 +208,13 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for BufferMan<Runtime> {
         self.sounds.get_mut(sound).and_then(|s| {
             s.check_loading(&self.delegate, sound);
             match s {
-                CachedSound::LoadedSound { format, vec, .. } => {
+                CachedSound::Loaded { format, vec, .. } => {
                     Some(new_buffer_stream(format, vec.clone(), start, end))
                 },
-                CachedSound::UnloadedSound { format, vec } => {
-                    match vec.upgrade() {
-                        None => None,
-                        Some(vec) => {
-                            Some(new_buffer_stream(format, vec.clone(), start, end))
-                        },
-                    }
+                CachedSound::Unloaded { format, vec } => {
+                    vec.upgrade().map(|vec| new_buffer_stream(format, vec.clone(), start, end))
                 },
-                CachedSound::LoadingSound { .. } => None,
+                CachedSound::Loading { .. } => None,
             }
         })
     }
@@ -303,7 +298,7 @@ impl<T: Sample> SoundReader<T> for BufferStream<T> {
         let len = (self.end - self.cursor).min(buf.len());
         let end = start + len;
         // sure hope the compiler figures out that this is a memmove
-        buf[..len].iter_mut().zip(&self.vec[start..end]).for_each(|(dst, src)| { dst.write(src.clone()); });
+        buf[..len].iter_mut().zip(&self.vec[start..end]).for_each(|(dst, src)| { dst.write(*src); });
         // https://github.com/rust-lang/rust/issue/79995
         //MaybeUninit::write_slice(&mut buf[..len], &self.vec[start..end]);
         self.cursor += len;

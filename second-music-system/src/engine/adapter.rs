@@ -7,6 +7,7 @@ use chanadapter::*;
 mod rateadapter;
 use rateadapter::*;
 
+#[allow(clippy::too_many_arguments)] // (internal function, doesn't care)
 pub(crate) fn adaptify(
     delegate: &Arc<dyn SoundDelegate>,
     soundman: &mut dyn GenericSoundMan,

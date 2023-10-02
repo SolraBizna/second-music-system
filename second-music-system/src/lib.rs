@@ -1,3 +1,5 @@
+#![allow(clippy::useless_format)] // DELETEME
+
 use std::{
     collections::HashMap,
     cmp::{Ordering, PartialOrd},
@@ -56,6 +58,12 @@ impl Soundtrack {
     }
     pub fn from_source(source: &str) -> Result<Soundtrack, String> {
         Soundtrack::new().parse_source(source)
+    }
+}
+
+impl Default for Soundtrack {
+    fn default() -> Soundtrack {
+        Soundtrack::new()
     }
 }
 

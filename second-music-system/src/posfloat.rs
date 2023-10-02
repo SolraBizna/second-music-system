@@ -37,6 +37,10 @@ impl PosFloat {
     }
     /// Create a new PosFloat from an f32, which you *promise* is positive and
     /// finite.
+    ///
+    /// # Safety
+    ///
+    /// `x` must be positive (sign bit of zero), and finite (exponent < max).
     pub const unsafe fn new_unchecked(x: f32) -> PosFloat {
         /* not available as const fn… */
         /*

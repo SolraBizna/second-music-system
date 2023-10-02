@@ -45,7 +45,7 @@ impl DinParser<'_> {
 impl Iterator for DinParser<'_> {
     type Item = Result<ParseItem, String>;
     fn next(&mut self) -> Option<Self::Item> {
-        while self.rem.len() > 0 || self.nodes_to_yield.len() > 0 {
+        while !self.rem.is_empty() || !self.nodes_to_yield.is_empty() {
             if let Some(node) = self.nodes_to_yield.pop() {
                 return Some(Ok(node))
             }
@@ -63,7 +63,7 @@ impl Iterator for DinParser<'_> {
                 Ok(x) => x,
                 Err(x) => return Some(Err(format!("line {}: {}", self.lineno, x))),
             };
-            if parsed.len() > 0 {
+            if !parsed.is_empty() {
                 self.nodes_to_yield.push(ParseItem::BeginNode(parsed, self.lineno));
                 while let Some(prev_level) = self.indentation_levels.last() {
                     if *prev_level >= indentation_level {
@@ -85,7 +85,7 @@ impl Iterator for DinParser<'_> {
                 else { break }
             }
         }
-        if let Some(_) = self.indentation_levels.pop() {
+        if self.indentation_levels.pop().is_some() {
             return Some(Ok(ParseItem::EndNode))
         }
         None

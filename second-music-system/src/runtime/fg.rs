@@ -1,4 +1,4 @@
-use std::{task::{Context, Waker, RawWaker, RawWakerVTable, Poll}, pin::pin};
+use std::{task::{Context, Waker, RawWaker, RawWakerVTable}, pin::pin};
 
 use super::*;
 
@@ -19,12 +19,7 @@ impl TaskRuntime for ForegroundTaskRuntime {
         let waker = unsafe { Waker::from_raw(RawWaker::new(&(), &RAW_WAKER_VTABLE)) };
         let mut context = Context::from_waker(&waker);
         let mut pin = pin!(task);
-        loop {
-            match Future::poll(pin.as_mut(), &mut context) {
-                Poll::Pending => continue,
-                Poll::Ready(()) => break,
-            }
-        }
+        while Future::poll(pin.as_mut(), &mut context).is_pending() { }
     }
 }
 

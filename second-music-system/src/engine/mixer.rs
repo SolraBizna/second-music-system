@@ -67,16 +67,16 @@ impl<ID: Debug> Mixer<ID> {
             next_output_sample_frame_number: 0,
         }
     }
-    pub fn play(&mut self, stream: Box<dyn SoundReader<f32>>, id: ID) {
+    pub fn play(&mut self, stream: Box<dyn SoundReader<f32>>, identity: ID) {
         self.channels.push(Channel {
-            stream: stream,
-            identity: id,
+            stream,
+            identity,
         });
     }
     /// Returns true if the channel lived, false if the channel died.
     fn mix_channel<T: VolumeGetter<ID>>(channel: &mut Channel<ID>, mut out: &mut[f32], mix_buf: &mut[MaybeUninit<f32>], mut volume_getter: T, samples_per_frame: usize) -> bool {
         let mut accum_len = 0;
-        while out.len() > 0 {
+        while !out.is_empty() {
             debug_assert!(out.len() % samples_per_frame == 0);
             debug_assert!(out.len() <= mix_buf.len());
             let stream = &mut channel.stream;
@@ -95,7 +95,7 @@ impl<ID: Debug> Mixer<ID> {
                     // for the whole buffer. We can do this because the volume
                     // is not currently varying.
                     let volume = volume_getter.get_volume(identity, t);
-                    let len = match volume {
+                    match volume {
                         // we're done here
                         None => {
                             return false
@@ -105,9 +105,9 @@ impl<ID: Debug> Mixer<ID> {
                                 if !stream.skip_precise(out.len() as u64, mix_buf) {
                                     return false
                                 }
-                                out.len() as usize
+                                out.len()
                             }
-                            else if volume == PosFloat::ZERO {
+                            else if volume == PosFloat::ONE {
                                 // easy mode
                                 let len = stream.read(&mut mix_buf[..out.len()]);
                                 assert!(len % samples_per_frame == 0);
@@ -127,8 +127,7 @@ impl<ID: Debug> Mixer<ID> {
                                 len
                             }
                         },
-                    };
-                    len
+                    }
                 },
                 Some(true) => {
                     // Time to bix!
@@ -186,7 +185,7 @@ impl<ID: Debug> Mixer<ID> {
                 return true
             }
         }
-        return true
+        true
     }
     /// Adds the active sounds to `out`. Unless you're combining more than one
     /// `Mixer`, you definitely *definitely* want to zero `out`.
@@ -194,8 +193,7 @@ impl<ID: Debug> Mixer<ID> {
         debug_assert!(out.len() % self.samples_per_frame == 0);
         debug_assert_eq!(out.len(), mix_buf.len());
         self.channels.retain_mut(|channel| {
-            let retain = Self::mix_channel(channel, out, mix_buf, &mut volume_getter, self.samples_per_frame);
-            retain
+            Self::mix_channel(channel, out, mix_buf, &mut volume_getter, self.samples_per_frame)
         });
         #[cfg(feature="debug-channels")]
         {

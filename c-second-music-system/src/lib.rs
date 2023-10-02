@@ -37,7 +37,7 @@ const SMS_FADE_TYPE_LINEAR: c_int = 2;
 const SMS_FADE_TYPE_EXPONENTIAL: c_int = 0;
 
 fn source_input(src: *const c_char, src_len: size_t) -> Result<&'static str, String> {
-    let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len as usize) };
+    let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len) };
     std::str::from_utf8(slice).map_err(|x| {
         format!("soundtrack source code contains invalid UTF-8 at byte {}", x.valid_up_to())
     })
@@ -49,7 +49,7 @@ fn source_input_cstr(src: *const c_char) -> Result<&'static str, String> {
 }
 
 fn input(src: *const c_char, src_len: size_t) -> Result<CompactString, String> {
-    let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len as usize) };
+    let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len) };
     Ok(String::from_utf8_lossy(slice).to_compact_string())
 }
 

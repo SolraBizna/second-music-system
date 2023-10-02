@@ -3,9 +3,7 @@
 
 use crate::*;
 
-use std::{
-    mem::MaybeUninit,
-};
+use std::mem::MaybeUninit;
 
 use libsoxr::*;
 
@@ -82,16 +80,16 @@ impl SoundReader<f32> for RateAdapter {
         // libsoxr library
         let out_slice: &mut [f32] = unsafe { std::mem::transmute(out) };
         let (in_consumed, out_produced) = self.soxr.process(in_slice, out_slice).expect("internal libsoxr error");
-        self.in_buf_pos += in_consumed as usize * self.num_channels as usize;
+        self.in_buf_pos += in_consumed * self.num_channels as usize;
         if self.in_buf_pos >= self.in_buf.len() {
             self.in_buf.truncate(0);
             self.in_buf_pos = 0;
         }
         if out_produced > 0 || self.fini {
-            return out_produced as usize * self.num_channels as usize
+            out_produced * self.num_channels as usize
         }
         else {
-            return self.read(unsafe { std::mem::transmute(out_slice) })
+            self.read(unsafe { std::mem::transmute(out_slice) })
         }
     }
     fn seek(&mut self, _pos: u64) -> Option<u64> {

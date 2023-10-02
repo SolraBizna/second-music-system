@@ -151,10 +151,7 @@ impl CachedStream {
         }
     }
     fn is_ready(&self) -> bool {
-        match self {
-            CachedStream::LoadedStream(_, _) => true,
-            _ => false,
-        }
+        matches!(self, CachedStream::LoadedStream(_, _))
     }
 }
 
