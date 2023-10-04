@@ -326,7 +326,8 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for StreamMan<Runtime> {
         start: PosFloat,
         _end: PosFloat,
     ) -> Option<FormattedSoundStream> {
-        // TODO: end
+        // Note: We don't need to worry about `_end`. The stream we return is
+        // already going to be put through `FadeAdapter`.
         let individual_sound = self.sounds.get_mut(sound)?;
         let カンバン = individual_sound.カンバン.get_mut(&start)?;
         カンバン.check_load(&self.delegate, sound, start, &self.loading_rt);

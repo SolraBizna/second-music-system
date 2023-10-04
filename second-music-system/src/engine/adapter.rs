@@ -28,7 +28,7 @@ pub(crate) fn adaptify(
     // We can do this safely with sounds that come from BufferMan, but not
     // necessarily with sounds that come from StreamMan!
     */
-    let mut stream = new_fade_adapter(sound, stream, fade_in, length, fade_out);
+    let mut stream = new_fade_adapter(sound, stream, fade_in, Some(length.unwrap_or_else(|| sound.end.saturating_sub(sound.start))), fade_out);
     let need_chan_adapter = in_speaker_layout != out_speaker_layout;
     let num_channels = if need_chan_adapter && in_sample_rate < out_sample_rate {
         stream = new_channel_adapter(stream, in_sample_rate, in_speaker_layout, out_speaker_layout);
