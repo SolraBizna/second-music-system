@@ -18,9 +18,6 @@ use adapter::*;
 mod interpreter;
 use interpreter::*;
 
-#[cfg(feature="debug-channels")]
-pub use mixer::MIX_CHANNELS;
-
 /// The name of the default channel. The default channel is at volume 1.0 by
 /// default, while all other channels are at 0.0. Additionally, the default
 /// channel is exempted from the "all except main" channel commands.
@@ -35,8 +32,14 @@ mod privacy_hack {
         Precache { flow_name: CompactString },
         Unprecache { flow_name: CompactString },
         UnprecacheAll {},
-        // TODO: IsReady cannot fit here????
+        IsFlowReady { flow_name: CompactString, tx: query::Responder<bool> },
+        IsFlowActive { flow_name: CompactString, tx: query::Responder<bool> },
+        GetActiveNodes { tx: query::Responder<Vec<ActiveNodeReport>> },
+        GetActiveFlows { tx: query::Responder<Vec<CompactString>> },
+        GetMixChannels { tx: query::Responder<Vec<MixChannelReport>> },
+        GetMixFlows { tx: query::Responder<Vec<MixFlowReport>> },
         SetFlowControl { control_name: CompactString, new_value: StringOrNumber },
+        GetFlowControl { control_name: CompactString, tx: query::Responder<Option<StringOrNumber>> },
         ClearFlowControl { control_name: CompactString },
         ClearPrefixedFlowControls { control_prefix: CompactString },
         ClearAllFlowControls {},
@@ -136,9 +139,65 @@ pub trait EngineCommands : EngineCommandIssuer {
     fn unprecache_all(&mut self) {
         self.issue(EngineCommand::UnprecacheAll {});
     }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// answer the question "Is this flow I precached now ready for instant
+    /// playback?"
+    fn is_flow_ready(&mut self, flow_name: CompactString) -> query::Response<bool> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::IsFlowReady { flow_name, tx });
+        rx
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// answer the question "Is this flow either currently playing or waiting
+    /// to start playing?" (After a flow reaches a natural end without looping,
+    /// this will return false.)
+    fn is_flow_active(&mut self, flow_name: CompactString) -> query::Response<bool> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::IsFlowActive { flow_name, tx });
+        rx
+    }
     /// Sets a given FlowControl to the given value.
     fn set_flow_control(&mut self, control_name: CompactString, new_value: StringOrNumber) {
         self.issue(EngineCommand::SetFlowControl { control_name, new_value })
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// answer the question "What is the current value of this flow control?"
+    /// (Flows can set flow control values themselves, and in doing so,
+    /// communicate in a very limited way back to the calling program.)
+    fn get_flow_control(&mut self, control_name: CompactString) -> query::Response<Option<StringOrNumber>> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::GetFlowControl { control_name, tx });
+        rx
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// give you a complete list of flows that are playing.
+    fn get_active_flows(&mut self) -> query::Response<Vec<CompactString>> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::GetActiveFlows { tx });
+        rx
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// give you a complete list of flow nodes that are playing.
+    fn get_active_nodes(&mut self) -> query::Response<Vec<ActiveNodeReport>> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::GetActiveNodes { tx });
+        rx
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// give you a complete list of mixer channels, and the volumes they are
+    /// currently set to.
+    fn get_mix_channels(&mut self) -> query::Response<Vec<MixChannelReport>> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::GetMixChannels { tx });
+        rx
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// give you a complete list of flows that are playing, and the volumes
+    /// they're playing at.
+    fn get_mix_flows(&mut self) -> query::Response<Vec<MixFlowReport>> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::GetMixFlows { tx });
+        rx
     }
     /// Clears a given FlowControl, removing any previous value.
     fn clear_flow_control(&mut self, control_name: CompactString) {
@@ -484,10 +543,6 @@ pub struct Engine {
     /// when they are requested to fade *out*.
     mix_controls_fading_out: HashSet<CompactString>,
     deferred_kill: bool,
-    // Will be updated on a best-effort basis. If the sound thread attempts to
-    // lock it, and the lock is already held, the values will not be updated.
-    flow_control_readout: Arc<RwLock<HashMap<CompactString, StringOrNumber>>>,
-    readout_needs_update: bool,
     sound_delegate: Arc<dyn SoundDelegate>,
     soundman: Box<dyn GenericSoundMan>,
     flow_loads: HashMap<CompactString, FlowLoadStatus>,
@@ -566,6 +621,7 @@ struct PlayingSoundID {
     // holy cow seriously, TODO: we need to intern strings!
     flow_and_node_name: StringAndAHalf,
     channel: CompactString,
+    sound: CompactString,
 }
 
 impl PlayingSoundID {
@@ -658,8 +714,6 @@ impl Engine {
             mix_controls: [(DEFAULT_CHANNEL.to_compact_string(), Fader::new(PosFloat::ONE))].into_iter().collect(),
             flow_volumes: HashMap::new(),
             node_volumes: HashMap::new(),
-            flow_control_readout: Arc::new(RwLock::new(HashMap::new())),
-            readout_needs_update: false,
             active_flow_nodes: vec![],
             queued_sounds: BinaryHeap::new(),
             mix_buf: vec![],
@@ -901,22 +955,6 @@ impl Engine {
             }
         }
         self.mix_buf = mix_buf;
-        if self.readout_needs_update {
-            if let Some(mut flow_control_readout) = self.flow_control_readout.try_write() {
-                *flow_control_readout = self.flow_controls.clone();
-                self.readout_needs_update = false;
-            }
-        }
-        #[cfg(feature="debug-flows")]
-        {
-            if let Some(mut target) = ACTIVE_FLOWS.try_lock() {
-                let report = self.active_flow_nodes.iter().map(|x| {
-                    let blah = format!("{:?}::{:?} next=[{}]@{}", x.flow_name, x.node.name, x.next_instruction_index, x.next_instruction_time);
-                    blah
-                }).collect();
-                *target = report;
-            }
-        }
         self.kill_the_unseen(seen_flows, seen_nodes);
     }
     /// Returns the number of sample frames left to output before the next
@@ -1095,6 +1133,7 @@ impl Engine {
                     node_name.map(|x| x.to_compact_string()),
                 ),
                 channel: channel.to_compact_string(),
+                sound: sound.name.clone(),
             },
             sound,
             fade_in,
@@ -1433,6 +1472,50 @@ impl EngineCommandIssuer for Engine {
                     false
                 });
             },
+            IsFlowActive { flow_name, tx } => {
+                tx.respond(matches!(self.flow_loads.get(&flow_name), Some(x) if x.active_loading));
+            },
+            IsFlowReady { flow_name, tx } => {
+                tx.respond(matches!(self.flow_loads.get(&flow_name), Some(x) if x.known_all_ready));
+            },
+            GetFlowControl { control_name, tx } => {
+                tx.respond(self.flow_controls.get(&control_name).cloned());
+            },
+            GetActiveFlows { tx } => {
+                let active_set: HashSet<CompactString> = self.active_flow_nodes.iter().map(|x| x.flow_name.clone()).collect();
+                tx.respond(active_set.into_iter().collect());
+            },
+            GetActiveNodes { tx } => {
+                let report = self.active_flow_nodes.iter().map(|x| {
+                    ActiveNodeReport {
+                        flow: x.flow_name.clone(),
+                        node: x.node.name.clone()
+                    }
+                }).collect();
+                tx.respond(report);
+            },
+            GetMixChannels { tx } => {
+                let report = self.mix_controls.iter().map(|(x,y)| MixChannelReport {name: x.clone(), volume: y.evaluate()}).collect();
+                tx.respond(report);
+            },
+            GetMixFlows { tx } => {
+                let report = self.mixer.report_volumes(VolumeGetWrapper {
+                    mix_controls: &mut self.mix_controls,
+                    flow_volumes: &mut self.flow_volumes,
+                    node_volumes: &mut self.node_volumes,
+                    flows_fading_out: &self.flows_fading_out,
+                    starting_flows: &self.starting_flows,
+                    seen_flows: &mut HashSet::new(),
+                    seen_nodes: &mut HashSet::new(),
+                }).map(|(x, y)| MixFlowReport {
+                    flow: x.flow_name().into(),
+                    node: x.node_name().map(|x| x.into()),
+                    channel: x.channel.clone(),
+                    sound: x.sound.clone(),
+                    volume: y,
+                }).collect();
+                tx.respond(report);
+            },
         }
     }
 }
@@ -1493,5 +1576,30 @@ impl FlowLoadStatus {
     }
 }
 
-#[cfg(feature="debug-flows")]
-pub static ACTIVE_FLOWS: parking_lot::Mutex<Vec<String>> = parking_lot::Mutex::new(vec![]);
+#[derive(Debug,Clone)]
+pub struct ActiveNodeReport {
+    /// The flow in question
+    pub flow: CompactString,
+    /// `None` if it is the starting node, `Some(x)` if it is a node named `x`
+    pub node: Option<CompactString>,
+}
+
+#[derive(Debug,Clone)]
+pub struct MixChannelReport {
+    pub name: CompactString,
+    pub volume: PosFloat,
+}
+
+
+#[derive(Debug,Clone)]
+pub struct MixFlowReport {
+    /// The flow in question
+    pub flow: CompactString,
+    /// `None` if it is the starting node, `Some(x)` if it is a node named `x`
+    pub node: Option<CompactString>,
+    /// The channel that is in play.
+    pub channel: CompactString,
+    /// The name of the sound that is actually playing.
+    pub sound: CompactString,
+    pub volume: PosFloat,
+}

@@ -9,7 +9,6 @@ use std::{
 use arcow::Arcow;
 use compact_str::{CompactString, ToCompactString};
 use crossbeam::channel::{Sender, Receiver, unbounded};
-use parking_lot::RwLock;
 
 #[macro_use]
 mod din;
@@ -18,6 +17,7 @@ mod data;
 mod delegate;
 mod engine;
 mod fader;
+pub mod query;
 mod reader;
 mod runtime;
 mod posfloat;

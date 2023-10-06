@@ -195,17 +195,6 @@ impl<ID: Debug> Mixer<ID> {
         self.channels.retain_mut(|channel| {
             Self::mix_channel(channel, out, mix_buf, &mut volume_getter, self.samples_per_frame)
         });
-        #[cfg(feature="debug-channels")]
-        {
-            if let Some(mut target) = MIX_CHANNELS.try_lock() {
-                let report = self.channels.iter().map(|x| {
-                    let volume = volume_getter.get_volume(&x.identity, PosFloat::ZERO);
-                    let blah = format!("{:?}", x.identity);
-                    (volume, blah)
-                }).collect();
-                *target = report;
-            }
-        }
         let out_frames = out.len() / self.samples_per_frame;
         volume_getter.step_faders_by(out_frames.into());
         self.next_output_sample_frame_number = self.next_output_sample_frame_number.wrapping_add(out_frames as u64);
@@ -223,7 +212,12 @@ impl<ID: Debug> Mixer<ID> {
     pub fn get_next_output_sample_frame_number(&self) -> u64 {
         self.next_output_sample_frame_number
     }
+    /// Returns a report of what identities are active, and what volumes they
+    /// are being mixed at.
+    pub fn report_volumes<'a, T: 'a + VolumeGetter<ID>>(&'a mut self, mut volume_getter: T) -> impl Iterator<Item=(&'a ID,PosFloat)> {
+        self.channels.iter().filter_map(move |x| {
+            let volume = volume_getter.get_volume(&x.identity, PosFloat::ZERO);
+            volume.map(|v| (&x.identity, v))
+        })
+    }
 }
-
-#[cfg(feature="debug-channels")]
-pub static MIX_CHANNELS: parking_lot::Mutex<Vec<(Option<PosFloat>, String)>> = parking_lot::Mutex::new(vec![]);
