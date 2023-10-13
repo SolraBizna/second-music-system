@@ -36,10 +36,12 @@ mod privacy_hack {
         IsFlowActive { flow_name: CompactString, tx: query::Responder<bool> },
         GetActiveNodes { tx: query::Responder<Vec<ActiveNodeReport>> },
         GetActiveFlows { tx: query::Responder<Vec<CompactString>> },
-        GetMixChannels { tx: query::Responder<Vec<MixChannelReport>> },
+        GetMixControl { control_name: CompactString, tx: query::Responder<Option<f32>> },
+        GetAllMixControls { tx: query::Responder<Vec<(CompactString,f32)>> },
         GetMixFlows { tx: query::Responder<Vec<MixFlowReport>> },
         SetFlowControl { control_name: CompactString, new_value: StringOrNumber },
         GetFlowControl { control_name: CompactString, tx: query::Responder<Option<StringOrNumber>> },
+        GetAllFlowControls { tx: query::Responder<Vec<(CompactString, StringOrNumber)>> },
         ClearFlowControl { control_name: CompactString },
         ClearPrefixedFlowControls { control_prefix: CompactString },
         ClearAllFlowControls {},
@@ -109,7 +111,8 @@ pub trait EngineCommands : EngineCommandIssuer {
     }
     /// Requests that the given flow be precached for playback. The engine
     /// will attempt to load/preroll all requested sounds and streams in the
-    /// background. Use TODO to determine when the loading is complete.
+    /// background. Use `is_flow_ready` to determine when the loading is
+    /// complete.
     ///
     /// This is *not* recursive. If you call `precache` twice, then call
     /// `unprecache` once, the flow will no longer be precached.
@@ -161,12 +164,20 @@ pub trait EngineCommands : EngineCommandIssuer {
         self.issue(EngineCommand::SetFlowControl { control_name, new_value })
     }
     /// Returns a [`query::Response`](query/struct.Response.html) that will
-    /// answer the question "What is the current value of this flow control?"
+    /// answer the question "What value does this flow control currently have?"
     /// (Flows can set flow control values themselves, and in doing so,
     /// communicate in a very limited way back to the calling program.)
     fn get_flow_control(&mut self, control_name: CompactString) -> query::Response<Option<StringOrNumber>> {
         let (tx, rx) = query::make();
         self.issue(EngineCommand::GetFlowControl { control_name, tx });
+        rx
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// give you a complete list of flow controls, and the values they are
+    /// currently set to.
+    fn get_all_flow_controls(&mut self) -> query::Response<Vec<(CompactString,StringOrNumber)>> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::GetAllFlowControls { tx });
         rx
     }
     /// Returns a [`query::Response`](query/struct.Response.html) that will
@@ -184,11 +195,21 @@ pub trait EngineCommands : EngineCommandIssuer {
         rx
     }
     /// Returns a [`query::Response`](query/struct.Response.html) that will
-    /// give you a complete list of mixer channels, and the volumes they are
-    /// currently set to.
-    fn get_mix_channels(&mut self) -> query::Response<Vec<MixChannelReport>> {
+    /// answer the question "What volume level is this mix control currently
+    /// operating at?" If there is a fade in progress, the volume reported
+    /// will reflect the current moment within the fade.
+    fn get_mix_control(&mut self, control_name: CompactString) -> query::Response<Option<f32>> {
         let (tx, rx) = query::make();
-        self.issue(EngineCommand::GetMixChannels { tx });
+        self.issue(EngineCommand::GetMixControl { control_name, tx });
+        rx
+    }
+    /// Returns a [`query::Response`](query/struct.Response.html) that will
+    /// give you a complete list of mix controls, and the volumes they are
+    /// currently operating at. If there is a fade in progress, the volumes
+    /// reported will reflect the current moment within the fade.
+    fn get_all_mix_controls(&mut self) -> query::Response<Vec<(CompactString,f32)>> {
+        let (tx, rx) = query::make();
+        self.issue(EngineCommand::GetAllMixControls { tx });
         rx
     }
     /// Returns a [`query::Response`](query/struct.Response.html) that will
@@ -618,7 +639,6 @@ impl PartialOrd for QueuedSound {
 struct StringAndAHalf(CompactString, Option<CompactString>);
 
 struct PlayingSoundID {
-    // holy cow seriously, TODO: we need to intern strings!
     flow_and_node_name: StringAndAHalf,
     channel: CompactString,
     sound: CompactString,
@@ -889,8 +909,6 @@ impl Engine {
                 match self.active_flow_nodes.iter_mut().find(|x| x.flow_name == flow_name && x.node.name == node_name) {
                     Some(afn) => {
                         // Node is already playing. Restart it.
-                        // TODO: Should this stop all sounds and sequences that
-                        // it has caused to play?
                         afn.next_instruction_index = 0;
                         afn.next_instruction_time = now;
                     },
@@ -925,7 +943,6 @@ impl Engine {
                     },
                 }
             }
-            // TODO: Process every queued sequence, too
             // Consume queued sounds whose times have come
             while self.queued_sounds.peek().map(|x| x.when <= now).unwrap_or(false) {
                 let queued_sound = self.queued_sounds.pop().unwrap();
@@ -1494,10 +1511,6 @@ impl EngineCommandIssuer for Engine {
                 }).collect();
                 tx.respond(report);
             },
-            GetMixChannels { tx } => {
-                let report = self.mix_controls.iter().map(|(x,y)| MixChannelReport {name: x.clone(), volume: y.evaluate()}).collect();
-                tx.respond(report);
-            },
             GetMixFlows { tx } => {
                 let report = self.mixer.report_volumes(VolumeGetWrapper {
                     mix_controls: &mut self.mix_controls,
@@ -1515,6 +1528,15 @@ impl EngineCommandIssuer for Engine {
                     volume: y,
                 }).collect();
                 tx.respond(report);
+            },
+            GetMixControl { control_name, tx } => {
+                tx.respond(self.mix_controls.get(&control_name).map(|x| *x.evaluate()));
+            },
+            GetAllFlowControls { tx } => {
+                tx.respond(self.flow_controls.iter().map(|(x, y)| (x.clone(), y.clone())).collect());
+            },
+            GetAllMixControls { tx } => {
+                tx.respond(self.mix_controls.iter().map(|(x, y)| (x.clone(), *y.evaluate())).collect());
             },
         }
     }
@@ -1583,13 +1605,6 @@ pub struct ActiveNodeReport {
     /// `None` if it is the starting node, `Some(x)` if it is a node named `x`
     pub node: Option<CompactString>,
 }
-
-#[derive(Debug,Clone)]
-pub struct MixChannelReport {
-    pub name: CompactString,
-    pub volume: PosFloat,
-}
-
 
 #[derive(Debug,Clone)]
 pub struct MixFlowReport {

@@ -142,7 +142,7 @@ pub(crate) struct Sequence {
     // unique within a soundtrack
     pub(crate) name: CompactString,
     pub(crate) length: PosFloat,
-    pub(crate) elements: Vec<(PosFloat, SequenceElement)>, // TODO make sure these are sorted
+    pub(crate) elements: Vec<(PosFloat, SequenceElement)>,
 }
 
 impl Sequence {

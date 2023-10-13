@@ -366,6 +366,23 @@ void SMS_Transaction_commit(struct SMS_Commander*);
 #undef SMS_Target
 
 ///////////////////////////////////////////////////////////////////////////////
+// BooleanResponse
+///////////////////////////////////////////////////////////////////////////////
+// A delayed answer to a yes-or-no question. Create it by calling one of the
+// `SMS_*_is_*` functions. (See `second-music-system-commands.h`)
+struct SMS_BooleanResponse;
+
+// Free the query. We're done with it.
+void SMS_BooleanResponse_free(struct SMS_BooleanResponse*);
+// Ask the query if there is a response. Returns `0` if there is no response
+// yet, `1` if the response has arrived (or never will).
+void SMS_BooleanResponse_poll(struct SMS_BooleanResponse*);
+// Get the response from the query. Returns `0` if the answer is "no", `1` if
+// the answer is "yes", or `-1` if there is not yet or never will be an
+// answer.
+int SMS_BooleanResponse_get(struct SMS_BooleanResponse*);
+
+///////////////////////////////////////////////////////////////////////////////
 // Utilities
 ///////////////////////////////////////////////////////////////////////////////
 

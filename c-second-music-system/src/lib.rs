@@ -11,6 +11,7 @@ use libc::{
 };
 use compact_str::{CompactString, ToCompactString};
 
+mod boolean_query;
 mod commander;
 mod commands;
 mod engine;
