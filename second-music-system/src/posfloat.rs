@@ -97,7 +97,7 @@ impl Eq for PosFloat {}
 
 impl PartialOrd for PosFloat {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.to_bits().partial_cmp(&other.0.to_bits())
+        Some(self.cmp(other))
     }
 }
 
