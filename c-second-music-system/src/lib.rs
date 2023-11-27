@@ -6,16 +6,18 @@ use std::{
     ptr::null_mut,
 };
 use libc::{
-    c_char, c_int, c_void, size_t,
+    c_char, c_int, c_void, size_t, c_float,
     malloc, strlen
 };
 use compact_str::{CompactString, ToCompactString};
 
-mod boolean_query;
+mod boolean_response;
 mod commander;
 mod commands;
 mod engine;
+mod flow_control_response;
 mod formatted_sound_stream;
+mod mix_control_response;
 mod sound_delegate;
 mod soundtrack;
 mod utilities;

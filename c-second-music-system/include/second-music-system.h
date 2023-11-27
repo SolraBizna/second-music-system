@@ -372,15 +372,55 @@ void SMS_Transaction_commit(struct SMS_Commander*);
 // `SMS_*_is_*` functions. (See `second-music-system-commands.h`)
 struct SMS_BooleanResponse;
 
-// Free the query. We're done with it.
+// Free the response. We're done with it.
 void SMS_BooleanResponse_free(struct SMS_BooleanResponse*);
-// Ask the query if there is a response. Returns `0` if there is no response
-// yet, `1` if the response has arrived (or never will).
+// Ask the response if it's ready. Returns non-zero if the response has
+// arrived (or if it never will).
 void SMS_BooleanResponse_poll(struct SMS_BooleanResponse*);
-// Get the response from the query. Returns `0` if the answer is "no", `1` if
-// the answer is "yes", or `-1` if there is not yet or never will be an
-// answer.
+// Get the response. Returns `0` if the answer is "no", `1` if the answer is
+// "yes", or `-1` if there is not yet or never will be an answer.
 int SMS_BooleanResponse_get(struct SMS_BooleanResponse*);
+
+///////////////////////////////////////////////////////////////////////////////
+// MixControlResponse
+///////////////////////////////////////////////////////////////////////////////
+// A delayed response to a `SMS_*_get_mix_control` call. (See
+// `second-music-system-commands.h`)
+struct SMS_MixControlResponse;
+
+// Free the query. We're done with it.
+void SMS_MixControlResponse_free(struct SMS_MixControlResponse*);
+// Ask the response if it's ready. Returns non-zero if the response has
+// arrived (or if it never will).
+void SMS_MixControlResponse_poll(struct SMS_MixControlResponse*);
+// Get the response. Returns the current volume if there is one, -1.0 if there
+// is no such mix control (such as because it faded out, or never got set),
+// or negative infinity if there is not yet or never will be an answer.
+float SMS_MixControlResponse_get(struct SMS_MixControlResponse*);
+
+///////////////////////////////////////////////////////////////////////////////
+// FlowControlResponse
+///////////////////////////////////////////////////////////////////////////////
+// A delayed response to a `SMS_*_get_flow_control` call. (See
+// `second-music-system-commands.h`)
+struct SMS_FlowControlResponse;
+
+// Free the query. We're done with it.
+void SMS_FlowControlResponse_free(struct SMS_FlowControlResponse*);
+// Ask the response if it's ready. Returns non-zero if the response has
+// arrived (or if it never will).
+void SMS_FlowControlResponse_poll(struct SMS_FlowControlResponse*);
+// Get the response. Will call `is_float`, `is_string`, `is_unset`, or
+// `no_response` as appropriate. If the function to be called is NULL, nothing
+// will be called.
+void SMS_FlowControlResponse_get(
+    struct SMS_FlowControlResponse*,
+    void* context,
+    void(*is_number)(void*, float),
+    void(*is_string)(void*, const char*, size_t),
+    void(*is_unset)(void*),
+    void(*no_response)(void*)
+);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Utilities
