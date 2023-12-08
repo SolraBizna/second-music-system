@@ -7,7 +7,10 @@ use std::{
     cell::UnsafeCell,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
     future::Future,
-    sync::{Arc, atomic::{AtomicBool,Ordering}},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     task::Poll,
 };
 
@@ -57,7 +60,7 @@ impl<T: Send + Sized> Drop for Responder<T> {
 /// Initiates a query.
 /// [See module-level documentation for more info.](index.html)
 pub fn make<T: Send + Sized>() -> (Responder<T>, Response<T>) {
-    let inner = Arc::new(Inner{
+    let inner = Arc::new(Inner {
         ready: AtomicBool::new(false),
         waker: AtomicWaker::new(),
         response: UnsafeCell::new(None),
@@ -145,7 +148,10 @@ impl Display for TryGetError {
 
 impl<T: Send + Sized> Future for Response<T> {
     type Output = T;
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<T> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<T> {
         match self.take() {
             Some(x) => Poll::Ready(x),
             None => {

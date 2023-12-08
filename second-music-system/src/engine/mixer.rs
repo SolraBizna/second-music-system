@@ -1,7 +1,4 @@
-use std::{
-    fmt::Debug,
-    mem::MaybeUninit,
-};
+use std::{fmt::Debug, mem::MaybeUninit};
 
 use crate::{PosFloat, SoundReader};
 
@@ -68,13 +65,16 @@ impl<ID: Debug> Mixer<ID> {
         }
     }
     pub fn play(&mut self, stream: Box<dyn SoundReader<f32>>, identity: ID) {
-        self.channels.push(Channel {
-            stream,
-            identity,
-        });
+        self.channels.push(Channel { stream, identity });
     }
     /// Returns true if the channel lived, false if the channel died.
-    fn mix_channel<T: VolumeGetter<ID>>(channel: &mut Channel<ID>, mut out: &mut[f32], mix_buf: &mut[MaybeUninit<f32>], mut volume_getter: T, samples_per_frame: usize) -> bool {
+    fn mix_channel<T: VolumeGetter<ID>>(
+        channel: &mut Channel<ID>,
+        mut out: &mut [f32],
+        mix_buf: &mut [MaybeUninit<f32>],
+        mut volume_getter: T,
+        samples_per_frame: usize,
+    ) -> bool {
         let mut accum_len = 0;
         while !out.is_empty() {
             debug_assert!(out.len() % samples_per_frame == 0);
@@ -85,7 +85,7 @@ impl<ID: Debug> Mixer<ID> {
             let len = match is_varying {
                 None => {
                     return false;
-                },
+                }
                 Some(false) => {
                     // Time to mix!
                     let out_frames = out.len() / samples_per_frame;
@@ -97,38 +97,41 @@ impl<ID: Debug> Mixer<ID> {
                     let volume = volume_getter.get_volume(identity, t);
                     match volume {
                         // we're done here
-                        None => {
-                            return false
-                        },
+                        None => return false,
                         Some(volume) => {
                             if volume == PosFloat::ZERO {
-                                if !stream.skip_precise(out.len() as u64, mix_buf) {
-                                    return false
+                                if !stream
+                                    .skip_precise(out.len() as u64, mix_buf)
+                                {
+                                    return false;
                                 }
                                 out.len()
-                            }
-                            else if volume == PosFloat::ONE {
+                            } else if volume == PosFloat::ONE {
                                 // easy mode
-                                let len = stream.read(&mut mix_buf[..out.len()]);
+                                let len =
+                                    stream.read(&mut mix_buf[..out.len()]);
                                 assert!(len % samples_per_frame == 0);
-                                for x in 0 .. len {
-                                    out[x] += unsafe { *mix_buf[x].assume_init_ref() };
+                                for x in 0..len {
+                                    out[x] += unsafe {
+                                        *mix_buf[x].assume_init_ref()
+                                    };
                                 }
                                 len
-                            }
-                            else {
+                            } else {
                                 // hard mode
-                                let len = stream.read(&mut mix_buf[..out.len()]);
+                                let len =
+                                    stream.read(&mut mix_buf[..out.len()]);
                                 assert!(len % samples_per_frame == 0);
-                                for x in 0 .. len {
-                                    out[x] += unsafe { *mix_buf[x].assume_init_ref() }
-                                        * *volume;
+                                for x in 0..len {
+                                    out[x] += unsafe {
+                                        *mix_buf[x].assume_init_ref()
+                                    } * *volume;
                                 }
                                 len
                             }
-                        },
+                        }
                     }
-                },
+                }
                 Some(true) => {
                     // Time to bix!
                     // We will have to call GetVolume every sample frame,
@@ -136,68 +139,79 @@ impl<ID: Debug> Mixer<ID> {
                     let mut time_accumulator = PosFloat::HALF;
                     let len = stream.read(&mut mix_buf[..out.len()]);
                     assert!(len % samples_per_frame == 0);
-                    for x in (0 .. len).step_by(samples_per_frame) {
-                        let volume = volume_getter.get_volume(identity, time_accumulator);
+                    for x in (0..len).step_by(samples_per_frame) {
+                        let volume = volume_getter
+                            .get_volume(identity, time_accumulator);
                         time_accumulator = time_accumulator + PosFloat::ONE;
                         match volume {
                             // we're done here
-                            None => {
-                                return false
-                            },
+                            None => return false,
                             Some(volume) => {
                                 if volume == PosFloat::ZERO {
                                     // we have nothing to mix, and we assume
                                     // we won't for the rest of the buffer
-                                    break
-                                }
-                                else if volume == PosFloat::ONE {
+                                    break;
+                                } else if volume == PosFloat::ONE {
                                     // easy mode
-                                    for x in x .. x + samples_per_frame {
-                                        out[x] += unsafe { *mix_buf[x].assume_init_ref() };
+                                    for x in x..x + samples_per_frame {
+                                        out[x] += unsafe {
+                                            *mix_buf[x].assume_init_ref()
+                                        };
                                     }
-                                }
-                                else {
+                                } else {
                                     // hard mode
-                                    for x in x .. x + samples_per_frame {
-                                        out[x] += unsafe { *mix_buf[x].assume_init_ref() }
-                                            * *volume;
+                                    for x in x..x + samples_per_frame {
+                                        out[x] += unsafe {
+                                            *mix_buf[x].assume_init_ref()
+                                        } * *volume;
                                     }
                                 }
-                            },
+                            }
                         }
                     }
                     len
-                },
+                }
             };
             if len == 0 {
                 // (Maybe) done outputting forever
-                return accum_len != 0
-            }
-            else if len < out.len() {
+                return accum_len != 0;
+            } else if len < out.len() {
                 // Need to mix a little bit more
                 out = &mut out[len..];
                 accum_len += len;
-                continue
-            }
-            else {
+                continue;
+            } else {
                 debug_assert_eq!(len, out.len());
                 // All done for now
-                return true
+                return true;
             }
         }
         true
     }
     /// Adds the active sounds to `out`. Unless you're combining more than one
     /// `Mixer`, you definitely *definitely* want to zero `out`.
-    pub fn mix<T: VolumeGetter<ID>>(&mut self, out: &mut[f32], mix_buf: &mut [MaybeUninit<f32>], mut volume_getter: T) {
+    pub fn mix<T: VolumeGetter<ID>>(
+        &mut self,
+        out: &mut [f32],
+        mix_buf: &mut [MaybeUninit<f32>],
+        mut volume_getter: T,
+    ) {
         debug_assert!(out.len() % self.samples_per_frame == 0);
         debug_assert_eq!(out.len(), mix_buf.len());
         self.channels.retain_mut(|channel| {
-            Self::mix_channel(channel, out, mix_buf, &mut volume_getter, self.samples_per_frame)
+            Self::mix_channel(
+                channel,
+                out,
+                mix_buf,
+                &mut volume_getter,
+                self.samples_per_frame,
+            )
         });
         let out_frames = out.len() / self.samples_per_frame;
         volume_getter.step_faders_by(out_frames.into());
-        self.next_output_sample_frame_number = self.next_output_sample_frame_number.wrapping_add(out_frames as u64);
+        self.next_output_sample_frame_number = self
+            .next_output_sample_frame_number
+            .wrapping_add(out_frames as u64);
     }
     /// Similar to `mix` with empty buffers. Use this if you desperately need
     /// the mixer to notice that some sounds have died.
@@ -214,7 +228,10 @@ impl<ID: Debug> Mixer<ID> {
     }
     /// Returns a report of what identities are active, and what volumes they
     /// are being mixed at.
-    pub fn report_volumes<'a, T: 'a + VolumeGetter<ID>>(&'a mut self, mut volume_getter: T) -> impl Iterator<Item=(&'a ID,PosFloat)> {
+    pub fn report_volumes<'a, T: 'a + VolumeGetter<ID>>(
+        &'a mut self,
+        mut volume_getter: T,
+    ) -> impl Iterator<Item = (&'a ID, PosFloat)> {
         self.channels.iter().filter_map(move |x| {
             let volume = volume_getter.get_volume(&x.identity, PosFloat::ZERO);
             volume.map(|v| (&x.identity, v))

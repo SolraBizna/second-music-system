@@ -10,7 +10,12 @@ use stream::*;
 pub(crate) trait SoundManSubtype<Runtime: TaskRuntime> {
     /// Load the given sound. Recursive; call `load` N times, and you have to
     /// call `unload` N times before it will take effect.
-    fn load(&mut self, sound: &str, start: PosFloat, loading_rt: &Arc<Runtime>);
+    fn load(
+        &mut self,
+        sound: &str,
+        start: PosFloat,
+        loading_rt: &Arc<Runtime>,
+    );
     /// Unload the given sound. The sound will actually stick around if it's
     /// currently being referenced by a decoder. Return true if the sound's
     /// live reference count becomes zero.
@@ -41,7 +46,10 @@ pub(crate) trait SoundManSubtype<Runtime: TaskRuntime> {
 }
 
 #[derive(Debug, PartialEq)]
-enum SoundType { Buffered, Streamed }
+enum SoundType {
+    Buffered,
+    Streamed,
+}
 
 struct SoundInfo {
     load_count: NonZeroUsize,
@@ -81,81 +89,118 @@ impl<Runtime: TaskRuntime> SoundMan<Runtime> {
 impl<Runtime: TaskRuntime> GenericSoundMan for SoundMan<Runtime> {
     fn load(&mut self, sound: &Sound) {
         if let Some(info) = self.sound_infos.get_mut(&sound.path) {
-            let target_type = if sound.stream { SoundType::Streamed } else { SoundType::Buffered };
+            let target_type = if sound.stream {
+                SoundType::Streamed
+            } else {
+                SoundType::Buffered
+            };
             if target_type != info.sound_type {
-                self.delegate.warning(&format!("sound file {:?} is both streamed and buffered", sound.path));
+                self.delegate.warning(&format!(
+                    "sound file {:?} is both streamed and buffered",
+                    sound.path
+                ));
             }
             // already loaded
             match info.sound_type {
                 SoundType::Streamed => {
-                    self.streamman.load(&sound.path, sound.start, &self.loading_rt);
+                    self.streamman.load(
+                        &sound.path,
+                        sound.start,
+                        &self.loading_rt,
+                    );
                     info.load_count = info.load_count.checked_add(1).unwrap();
-                },
+                }
                 SoundType::Buffered => {
-                    self.bufferman.load(&sound.path, sound.start, &self.loading_rt);
+                    self.bufferman.load(
+                        &sound.path,
+                        sound.start,
+                        &self.loading_rt,
+                    );
                     info.load_count = info.load_count.checked_add(1).unwrap();
-                },
+                }
             }
-        }
-        else {
+        } else {
             // not yet loaded
             let sound_type = if sound.stream {
                 // load it as a streaming sound
-                self.streamman.load(&sound.path, sound.start, &self.loading_rt);
+                self.streamman.load(
+                    &sound.path,
+                    sound.start,
+                    &self.loading_rt,
+                );
                 SoundType::Streamed
-            }
-            else {
-                self.bufferman.load(&sound.path, sound.start, &self.loading_rt);
+            } else {
+                self.bufferman.load(
+                    &sound.path,
+                    sound.start,
+                    &self.loading_rt,
+                );
                 SoundType::Buffered
             };
-            self.sound_infos.insert(sound.path.clone(), SoundInfo {
-                sound_type,
-                load_count: NonZeroUsize::new(1).unwrap(),
-            });
+            self.sound_infos.insert(
+                sound.path.clone(),
+                SoundInfo {
+                    sound_type,
+                    load_count: NonZeroUsize::new(1).unwrap(),
+                },
+            );
         }
     }
     fn unload(&mut self, sound: &Sound) {
         match self.sound_infos.get_mut(&sound.path) {
             None => {
                 self.delegate.warning(&format!("unbalanced unload of sound file {:?} (THIS IS A BUG IN SMS)", sound.path));
-            },
+            }
             Some(sound_info) => {
                 match sound_info.sound_type {
                     SoundType::Streamed => {
                         self.streamman.unload(&sound.path, sound.start);
-                    },
+                    }
                     SoundType::Buffered => {
                         self.bufferman.unload(&sound.path, sound.start);
                     }
                 };
-                let new_load_count = sound_info.load_count.get().checked_sub(1);
+                let new_load_count =
+                    sound_info.load_count.get().checked_sub(1);
                 match new_load_count.and_then(NonZeroUsize::new) {
-                    None => { self.sound_infos.remove(&sound.path); },
+                    None => {
+                        self.sound_infos.remove(&sound.path);
+                    }
                     Some(x) => sound_info.load_count = x,
                 }
-            },
+            }
         }
     }
     fn is_ready(&mut self, sound: &Sound) -> bool {
         match self.sound_infos.get(&sound.path) {
             None => false, // not being loaded, therefore not ready
-            Some(SoundInfo { sound_type: SoundType::Buffered, .. }) => {
-                self.bufferman.is_ready(&sound.path, sound.start)
-            },
-            Some(SoundInfo { sound_type: SoundType::Streamed, .. }) => {
-                self.streamman.is_ready(&sound.path, sound.start)
-            },
+            Some(SoundInfo {
+                sound_type: SoundType::Buffered,
+                ..
+            }) => self.bufferman.is_ready(&sound.path, sound.start),
+            Some(SoundInfo {
+                sound_type: SoundType::Streamed,
+                ..
+            }) => self.streamman.is_ready(&sound.path, sound.start),
         }
     }
     fn get_sound(&mut self, sound: &Sound) -> Option<FormattedSoundStream> {
         match self.sound_infos.get(&sound.path) {
             None => None, // not being loaded, therefore not ready
-            Some(SoundInfo { sound_type: SoundType::Buffered, .. }) => {
-                self.bufferman.get_sound(&sound.path, sound.start, sound.end)
-            },
-            Some(SoundInfo { sound_type: SoundType::Streamed, .. }) => {
-                self.streamman.get_sound(&sound.path, sound.start, sound.end)
-            },
+            Some(SoundInfo {
+                sound_type: SoundType::Buffered,
+                ..
+            }) => {
+                self.bufferman
+                    .get_sound(&sound.path, sound.start, sound.end)
+            }
+            Some(SoundInfo {
+                sound_type: SoundType::Streamed,
+                ..
+            }) => {
+                self.streamman
+                    .get_sound(&sound.path, sound.start, sound.end)
+            }
         }
     }
 }

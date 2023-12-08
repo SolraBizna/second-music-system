@@ -5,32 +5,32 @@ use crate::data::{PredicateOp, StringOrNumber};
 use compact_str::CompactString;
 
 macro_rules! op {
-    ($stack:ident, |$operand:ident| $expr:expr) => {
-        {
-            assert!($stack.len() >= 1, "stack underflow");
-            let $operand = $stack.pop().unwrap();
-            let result = $expr.into();
-            $stack.push(result);
-        }
-    };
-    ($stack:ident, |$lhs:ident, $rhs:ident| $expr:expr) => {
-        {
-            assert!($stack.len() >= 2, "stack underflow");
-            let $rhs = $stack.pop().unwrap();
-            let $lhs = $stack.pop().unwrap();
-            let result = $expr.into();
-            $stack.push(result);
-        }
-    };
+    ($stack:ident, |$operand:ident| $expr:expr) => {{
+        assert!($stack.len() >= 1, "stack underflow");
+        let $operand = $stack.pop().unwrap();
+        let result = $expr.into();
+        $stack.push(result);
+    }};
+    ($stack:ident, |$lhs:ident, $rhs:ident| $expr:expr) => {{
+        assert!($stack.len() >= 2, "stack underflow");
+        let $rhs = $stack.pop().unwrap();
+        let $lhs = $stack.pop().unwrap();
+        let result = $expr.into();
+        $stack.push(result);
+    }};
 }
 
-pub(crate) fn evaluate(flow_controls: &HashMap<CompactString, StringOrNumber>,
-    ops: &[PredicateOp]) -> StringOrNumber {
+pub(crate) fn evaluate(
+    flow_controls: &HashMap<CompactString, StringOrNumber>,
+    ops: &[PredicateOp],
+) -> StringOrNumber {
     let mut stack: Vec<StringOrNumber> = Vec::with_capacity(16);
     for op in ops.iter() {
         use PredicateOp::*;
         match op {
-            PushVar(x) => stack.push(flow_controls.get(x).cloned().unwrap_or_default()),
+            PushVar(x) => {
+                stack.push(flow_controls.get(x).cloned().unwrap_or_default())
+            }
             PushConst(x) => stack.push(x.clone()),
             Eq => op!(stack, |a, b| a == b),
             NotEq => op!(stack, |a, b| a != b),
@@ -55,7 +55,10 @@ pub(crate) fn evaluate(flow_controls: &HashMap<CompactString, StringOrNumber>,
             ASin => op!(stack, |a| a.as_number().asin().to_degrees()),
             ACos => op!(stack, |a| a.as_number().acos().to_degrees()),
             ATan => op!(stack, |a| a.as_number().atan().to_degrees()),
-            ATan2 => op!(stack, |a, b| a.as_number().atan2(b.as_number()).to_degrees()),
+            ATan2 => op!(stack, |a, b| a
+                .as_number()
+                .atan2(b.as_number())
+                .to_degrees()),
             Log => op!(stack, |a| a.as_number().ln()),
             Exp => op!(stack, |a| a.as_number().exp()),
             Floor => op!(stack, |a| a.as_number().floor()),

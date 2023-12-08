@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display, Formatter, Result as FmtResult},
     hash::{Hash, Hasher},
     num::ParseFloatError,
-    ops::{Deref, Add, Div, Mul},
+    ops::{Add, Deref, Div, Mul},
     str::FromStr,
 };
 
@@ -33,7 +33,9 @@ impl PosFloat {
             Err("PosFloat must be finite")
         } else if !x.is_sign_positive() {
             Err("PosFloat must be positive")
-        } else { Ok(PosFloat(x)) }
+        } else {
+            Ok(PosFloat(x))
+        }
     }
     /// Create a new PosFloat from an f32, which you *promise* is positive and
     /// finite.
@@ -52,8 +54,11 @@ impl PosFloat {
     /// Create a new PosFloat from an f32. If it is non-finite or negative,
     /// return zero.
     pub fn new_clamped(x: f32) -> PosFloat {
-        if x.is_finite() && x.is_sign_positive() { PosFloat(x) }
-        else { PosFloat::ZERO }
+        if x.is_finite() && x.is_sign_positive() {
+            PosFloat(x)
+        } else {
+            PosFloat::ZERO
+        }
     }
     /// Interprets this `PosFloat` as a time in seconds, and converts it to an
     /// integer number of sample frames at the given sample rate.
@@ -67,8 +72,13 @@ impl PosFloat {
     }
     /// Interprets this `PosFloat` as a time in seconds, and converts it to an
     /// integer number of samples for the given sample rate and speaker layout.
-    pub fn seconds_to_samples(&self, sample_rate: PosFloat, speaker_layout: SpeakerLayout) -> u64 {
-        self.seconds_to_frames(sample_rate) * speaker_layout.get_num_channels() as u64
+    pub fn seconds_to_samples(
+        &self,
+        sample_rate: PosFloat,
+        speaker_layout: SpeakerLayout,
+    ) -> u64 {
+        self.seconds_to_frames(sample_rate)
+            * speaker_layout.get_num_channels() as u64
     }
     /// Subtract `differend` from ourselves and return the result. If the
     /// result would have been zero (because `different` is greater than
@@ -77,7 +87,9 @@ impl PosFloat {
         let ret = self.0 - differend.0;
         if ret.is_sign_negative() || !ret.is_finite() {
             PosFloat::ZERO
-        } else { PosFloat(ret) }
+        } else {
+            PosFloat(ret)
+        }
     }
 }
 

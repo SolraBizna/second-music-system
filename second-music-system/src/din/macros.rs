@@ -150,5 +150,6 @@ macro_rules! parse_mandatory_prefixed_child {
     }}
 }
 
-#[cfg(test)] #[path="macro_test.rs"] mod test;
-
+#[cfg(test)]
+#[path = "macro_test.rs"]
+mod test;

@@ -1,15 +1,12 @@
 use second_music_system::*;
 
+use compact_str::{CompactString, ToCompactString};
+use libc::{c_char, c_float, c_int, c_void, malloc, size_t, strlen};
 use std::{
     ffi::CString,
     mem::{size_of, transmute},
     ptr::null_mut,
 };
-use libc::{
-    c_char, c_int, c_void, size_t, c_float,
-    malloc, strlen
-};
-use compact_str::{CompactString, ToCompactString};
 
 mod boolean_response;
 mod commander;
@@ -39,10 +36,16 @@ const SMS_FADE_TYPE_LOGARITHMIC: c_int = 1;
 const SMS_FADE_TYPE_LINEAR: c_int = 2;
 const SMS_FADE_TYPE_EXPONENTIAL: c_int = 0;
 
-fn source_input(src: *const c_char, src_len: size_t) -> Result<&'static str, String> {
+fn source_input(
+    src: *const c_char,
+    src_len: size_t,
+) -> Result<&'static str, String> {
     let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len) };
     std::str::from_utf8(slice).map_err(|x| {
-        format!("soundtrack source code contains invalid UTF-8 at byte {}", x.valid_up_to())
+        format!(
+            "soundtrack source code contains invalid UTF-8 at byte {}",
+            x.valid_up_to()
+        )
     })
 }
 
@@ -51,7 +54,10 @@ fn source_input_cstr(src: *const c_char) -> Result<&'static str, String> {
     source_input(src, len)
 }
 
-fn input(src: *const c_char, src_len: size_t) -> Result<CompactString, String> {
+fn input(
+    src: *const c_char,
+    src_len: size_t,
+) -> Result<CompactString, String> {
     let slice = unsafe { std::slice::from_raw_parts(transmute(src), src_len) };
     Ok(String::from_utf8_lossy(slice).to_compact_string())
 }
@@ -61,7 +67,11 @@ fn input_cstr(src: *const c_char) -> Result<CompactString, String> {
     input(src, len)
 }
 
-fn output_error(text: &str, error_out: *mut *mut c_char, error_out_len: *mut size_t) {
+fn output_error(
+    text: &str,
+    error_out: *mut *mut c_char,
+    error_out_len: *mut size_t,
+) {
     unsafe {
         if let Some(error_out_len) = error_out_len.as_mut() {
             *error_out_len = text.len() as size_t;
@@ -70,7 +80,10 @@ fn output_error(text: &str, error_out: *mut *mut c_char, error_out_len: *mut siz
             let ptr = malloc(text.len() + 1);
             *error_out = transmute(ptr);
             if !ptr.is_null() {
-                let slice = std::slice::from_raw_parts_mut(transmute(ptr), text.len() + 1);
+                let slice = std::slice::from_raw_parts_mut(
+                    transmute(ptr),
+                    text.len() + 1,
+                );
                 slice[text.len()] = 0u8;
                 slice[..text.len()].copy_from_slice(text.as_bytes());
             }
@@ -107,7 +120,9 @@ fn speaker_layout_to_int(layout: SpeakerLayout) -> c_int {
         SpeakerLayout::Quadraphonic => SMS_SPEAKER_LAYOUT_QUADRAPHONIC,
         SpeakerLayout::Surround51 => SMS_SPEAKER_LAYOUT_SURROUND51,
         SpeakerLayout::Surround71 => SMS_SPEAKER_LAYOUT_SURROUND71,
-        _ => panic!("SpeakerLayout was expanded, but speaker_layout_to_int was not!"),
+        _ => panic!(
+            "SpeakerLayout was expanded, but speaker_layout_to_int was not!"
+        ),
     }
 }
 

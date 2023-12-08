@@ -7,7 +7,11 @@ use std::future::Future;
 /// and return" or of the type "perform some blocking IO and computation and
 /// return". Regular blocking IO is used, not any kind of async IO.
 pub trait TaskRuntime: 'static + Send + Sync {
-    fn spawn_task(&self, kind: TaskType, task: impl Future<Output=()> + Send + 'static);
+    fn spawn_task(
+        &self,
+        kind: TaskType,
+        task: impl Future<Output = ()> + Send + 'static,
+    );
 }
 
 /// Types of background loading tasks.
@@ -26,13 +30,12 @@ pub enum TaskType {
 mod fg;
 pub use fg::*;
 
-#[cfg(feature="switchyard")]
+#[cfg(feature = "switchyard")]
 mod switchyard;
-#[cfg(feature="switchyard")]
+#[cfg(feature = "switchyard")]
 pub use self::switchyard::*;
 
-#[cfg(feature="tokio")]
+#[cfg(feature = "tokio")]
 mod tokio;
-#[cfg(feature="tokio")]
+#[cfg(feature = "tokio")]
 pub use self::tokio::*;
-

@@ -1,4 +1,7 @@
-use std::{task::{Context, Waker, RawWaker, RawWakerVTable}, pin::pin};
+use std::{
+    pin::pin,
+    task::{Context, RawWaker, RawWakerVTable, Waker},
+};
 
 use super::*;
 
@@ -15,11 +18,15 @@ static RAW_WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
 );
 
 impl TaskRuntime for ForegroundTaskRuntime {
-    fn spawn_task(&self, _kind: TaskType, task: impl Future<Output=()> + Send + 'static) {
-        let waker = unsafe { Waker::from_raw(RawWaker::new(&(), &RAW_WAKER_VTABLE)) };
+    fn spawn_task(
+        &self,
+        _kind: TaskType,
+        task: impl Future<Output = ()> + Send + 'static,
+    ) {
+        let waker =
+            unsafe { Waker::from_raw(RawWaker::new(&(), &RAW_WAKER_VTABLE)) };
         let mut context = Context::from_waker(&waker);
         let mut pin = pin!(task);
-        while Future::poll(pin.as_mut(), &mut context).is_pending() { }
+        while Future::poll(pin.as_mut(), &mut context).is_pending() {}
     }
 }
-

@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 struct ForeignSoundDelegate {
     callback_data: *mut c_void,
-    file_open_handler: unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut FormattedSoundStream,
+    file_open_handler: unsafe extern "C" fn(
+        *mut c_void,
+        *const c_char,
+    ) -> *mut FormattedSoundStream,
     warning_handler: Option<unsafe extern "C" fn(*mut c_void, *const c_char)>,
     free_handler: Option<unsafe extern "C" fn(*mut c_void)>,
 }
@@ -23,11 +26,11 @@ impl SoundDelegate for ForeignSoundDelegate {
     fn open_file(&self, name: &str) -> Option<FormattedSoundStream> {
         let name = CString::new(name).unwrap();
         unsafe {
-            let result = (self.file_open_handler)(self.callback_data, name.as_ptr());
+            let result =
+                (self.file_open_handler)(self.callback_data, name.as_ptr());
             if result.is_null() {
                 None
-            }
-            else {
+            } else {
                 Some(*Box::from_raw(result))
             }
         }
@@ -39,7 +42,7 @@ impl SoundDelegate for ForeignSoundDelegate {
                 unsafe {
                     (warning_handler)(self.callback_data, message.as_ptr());
                 }
-            },
+            }
             None => {
                 eprintln!("SMS warning: {}", message);
             }
@@ -50,11 +53,17 @@ impl SoundDelegate for ForeignSoundDelegate {
 #[no_mangle]
 extern "C" fn SMS_SoundDelegate_new(
     callback_data: *mut c_void,
-    file_open_handler: Option<unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut FormattedSoundStream>,
+    file_open_handler: Option<
+        unsafe extern "C" fn(
+            *mut c_void,
+            *const c_char,
+        ) -> *mut FormattedSoundStream,
+    >,
     warning_handler: Option<unsafe extern "C" fn(*mut c_void, *const c_char)>,
     free_handler: Option<unsafe extern "C" fn(*mut c_void)>,
 ) -> *mut Arc<dyn SoundDelegate> {
-    let file_open_handler = file_open_handler.expect("SMS_SoundDelegate_new: file_open_handler cannot be NULL!");
+    let file_open_handler = file_open_handler
+        .expect("SMS_SoundDelegate_new: file_open_handler cannot be NULL!");
     Box::into_raw(Box::new(Arc::new(ForeignSoundDelegate {
         callback_data,
         file_open_handler,
@@ -67,4 +76,3 @@ extern "C" fn SMS_SoundDelegate_new(
 extern "C" fn SMS_SoundDelegate_free(p: *mut Arc<dyn SoundDelegate>) {
     drop(unsafe { Box::from_raw(p) })
 }
-

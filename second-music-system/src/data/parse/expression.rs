@@ -27,23 +27,28 @@ impl ExprNode<'_> {
 // 6: and
 // 7: or
 
-fn parse_partial(it: &mut std::vec::IntoIter<&str>, top_level: bool) -> Result<Vec<PredicateOp>, String> {
+fn parse_partial(
+    it: &mut std::vec::IntoIter<&str>,
+    top_level: bool,
+) -> Result<Vec<PredicateOp>, String> {
     let mut partial = Vec::new();
     loop {
         let x = it.next();
         let x = match x {
             None => {
-                if top_level { break }
-                else {
-                    return Err("unbalanced parentheses in expression (not enough \")\")".to_string())
+                if top_level {
+                    break;
+                } else {
+                    return Err("unbalanced parentheses in expression (not enough \")\")".to_string());
                 }
-            },
+            }
             Some(")") => {
-                if !top_level { break }
-                else {
-                    return Err("unbalanced parentheses in expression (too many \")\")".to_string())
+                if !top_level {
+                    break;
+                } else {
+                    return Err("unbalanced parentheses in expression (too many \")\")".to_string());
                 }
-            },
+            }
             Some(x) => x,
         };
         match x {
@@ -95,13 +100,15 @@ fn parse_partial(it: &mut std::vec::IntoIter<&str>, top_level: bool) -> Result<V
         }
     }
     if partial.is_empty() {
-        return Err("an expression or subexpression must not be empty".to_string())
+        return Err(
+            "an expression or subexpression must not be empty".to_string()
+        );
     }
     // Check for attempts to "do$this"
-    for n in 0 .. partial.len() - 1 {
-        if let ExprNode::UnOp { op: "$" } = partial[n+1] {
+    for n in 0..partial.len() - 1 {
+        if let ExprNode::UnOp { op: "$" } = partial[n + 1] {
             if let ExprNode::StringOrNumber(_) = partial[n] {
-                return Err("partial substitution is not allowed (you cannot put a \"$\" in the middle of text)".to_string())
+                return Err("partial substitution is not allowed (you cannot put a \"$\" in the middle of text)".to_string());
             }
         }
     }
@@ -115,9 +122,9 @@ fn parse_partial(it: &mut std::vec::IntoIter<&str>, top_level: bool) -> Result<V
         },
         _ => (),
     }
-    for n in (0 .. partial.len() - 1).rev() {
+    for n in (0..partial.len() - 1).rev() {
         if let ExprNode::UnOp { op } = partial[n] {
-            let second = partial.remove(n+1);
+            let second = partial.remove(n + 1);
             partial.remove(n);
             match (op, second) {
                 ("$", ExprNode::StringOrNumber(StringOrNumber::String(str))) => {
@@ -167,33 +174,34 @@ fn parse_partial(it: &mut std::vec::IntoIter<&str>, top_level: bool) -> Result<V
             x => panic!("internal error: {:?} left in partial but should have been glommed", x),
         };
         if !ok {
-            return Err("malformed expression".to_string())
+            return Err("malformed expression".to_string());
         }
     }
     if partial.len() % 2 != 1 {
-        return Err("binary operator missing second operand".to_string())
+        return Err("binary operator missing second operand".to_string());
     }
     while partial.len() > 1 {
         debug_assert!(partial.len() % 2 == 1);
         let old_len = partial.len();
         // Find the most precedential binary operator (leftmost)
         let mut best = None;
-        for n in (1 .. partial.len()).step_by(2) {
+        for n in (1..partial.len()).step_by(2) {
             let (op, precedence) = match &partial[n] {
                 ExprNode::BinOp { op, precedence } => (*op, *precedence),
                 _ => unreachable!(),
             };
             let is_best = match best.as_ref() {
                 None => true,
-                Some((_best_n, _best_op, best_precedence)) =>
-                    precedence < *best_precedence,
+                Some((_best_n, _best_op, best_precedence)) => {
+                    precedence < *best_precedence
+                }
             };
             if is_best {
                 best = Some((n, op, precedence))
             }
         }
         let (index, op, _) = best.unwrap();
-        let mut it = partial.splice((index - 1) ..= (index + 1), None);
+        let mut it = partial.splice((index - 1)..=(index + 1), None);
         let left = it.next().unwrap();
         let _ = it.next().unwrap();
         let right = it.next().unwrap();
@@ -237,12 +245,8 @@ fn parse_partial(it: &mut std::vec::IntoIter<&str>, top_level: bool) -> Result<V
     assert!(partial.len() == 1);
     let it = partial.pop().unwrap();
     match it {
-        ExprNode::Subexpression(ops) => {
-            Ok(ops)
-        },
-        ExprNode::StringOrNumber(son) => {
-            Ok(vec![PredicateOp::PushConst(son)])
-        },
+        ExprNode::Subexpression(ops) => Ok(ops),
+        ExprNode::StringOrNumber(son) => Ok(vec![PredicateOp::PushConst(son)]),
         _ => panic!("internal error: partial not fully consumed! {:?}", it),
     }
 }
@@ -250,37 +254,46 @@ fn parse_partial(it: &mut std::vec::IntoIter<&str>, top_level: bool) -> Result<V
 /// Parses the condition portion of an `if` or `elseif`. Will take everything
 /// up to the first `then` as the condition expression, and return everything
 /// after it as the rest.
-pub(super) fn parse_condition(tokens: &[String]) -> Result<(Vec<PredicateOp>, &[String]), String> {
+pub(super) fn parse_condition(
+    tokens: &[String],
+) -> Result<(Vec<PredicateOp>, &[String]), String> {
     let then_pos = match tokens.iter().position(|x| x == "then") {
         Some(x) => x,
         None => {
             if tokens.iter().any(|x| x.ends_with("then")) {
-                return Err("\"then\" must be cleanly separated from the condition (try adding a space)".to_string())
+                return Err("\"then\" must be cleanly separated from the condition (try adding a space)".to_string());
+            } else {
+                return Err("condition must end in a \"then\"".to_string());
             }
-            else {
-                return Err("condition must end in a \"then\"".to_string())
-            }
-        },
+        }
     };
     if then_pos == 0 {
-        return Err("condition cannot be empty".to_string())
+        return Err("condition cannot be empty".to_string());
     }
-    let rest = &tokens[then_pos+1..];
+    let rest = &tokens[then_pos + 1..];
     Ok((parse_expression(&tokens[..then_pos])?, rest))
 }
 
 /// Parses any expression.
-pub(super) fn parse_expression(tokens: &[String]) -> Result<Vec<PredicateOp>, String> {
+pub(super) fn parse_expression(
+    tokens: &[String],
+) -> Result<Vec<PredicateOp>, String> {
     let mut pieces = Vec::with_capacity(tokens.len());
     // DinNodes are parsed in "shellish", but for convenience, we want to do
     // some additional splitting around "operators". This means you can't
     // quote-escape operators but this seems like a small price to pay.
     for token in (tokens[..tokens.len()]).iter() {
         let mut rest = token.as_str();
-        while let Some((split_pos, _)) = rest.char_indices().find(|(_, ch)| data::EXPRESSION_SPLIT_CHARS.contains(|x| x == *ch)) {
+        while let Some((split_pos, _)) = rest.char_indices().find(|(_, ch)| {
+            data::EXPRESSION_SPLIT_CHARS.contains(|x| x == *ch)
+        }) {
             let before = &rest[..split_pos];
             let during = &rest[split_pos..];
-            let split_len = during.char_indices().nth(1).map(|x| x.0).unwrap_or(during.len());
+            let split_len = during
+                .char_indices()
+                .nth(1)
+                .map(|x| x.0)
+                .unwrap_or(during.len());
             let after = &during[split_len..];
             if !before.is_empty() {
                 pieces.push(before);
@@ -294,33 +307,33 @@ pub(super) fn parse_expression(tokens: &[String]) -> Result<Vec<PredicateOp>, St
     }
     // Replace >= and <= and != with their funky equivalents
     if pieces.len() > 1 {
-        for n in (0 .. pieces.len() - 1).rev() {
-            if pieces[n+1] == "=" {
+        for n in (0..pieces.len() - 1).rev() {
+            if pieces[n + 1] == "=" {
                 match pieces[n] {
                     ">" => {
-                        pieces.splice(n ..= n+1, ["≥"]);
-                    },
+                        pieces.splice(n..=n + 1, ["≥"]);
+                    }
                     "<" => {
-                        pieces.splice(n ..= n+1, ["≤"]);
-                    },
+                        pieces.splice(n..=n + 1, ["≤"]);
+                    }
                     "!" => {
-                        pieces.splice(n ..= n+1, ["≠"]);
-                    },
+                        pieces.splice(n..=n + 1, ["≠"]);
+                    }
                     // as a concession to JavaScript, accept any number of
                     // consecutive `=` as being equivalent to one.
                     "=" => {
-                        pieces.remove(n+1);
-                    },
+                        pieces.remove(n + 1);
+                    }
                     _ => (),
                 }
-            }
-            else if pieces[n] == "/" {
-                if pieces[n+1] == "/" {
+            } else if pieces[n] == "/" {
+                if pieces[n + 1] == "/" {
                     // implement `//` operator
-                    pieces.splice(n ..= n+1, ["//"]);
-                }
-                else if pieces[n+1] == "//" {
-                    return Err("too many \"/\"s in a row in expression".to_string())
+                    pieces.splice(n..=n + 1, ["//"]);
+                } else if pieces[n + 1] == "//" {
+                    return Err(
+                        "too many \"/\"s in a row in expression".to_string()
+                    );
                 }
             }
         }

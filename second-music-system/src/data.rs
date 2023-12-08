@@ -2,17 +2,13 @@
 
 use super::*;
 
-use std::{
-    borrow::Cow,
-    collections::HashSet,
-    str::FromStr,
-};
+use std::{borrow::Cow, collections::HashSet, str::FromStr};
 
 mod parse;
 
 // ASCII printable non-digit non-letter characters (excluding underscore and
 // space and quote marks), and also throw in the funky inequality chars
-pub const EXPRESSION_SPLIT_CHARS: &str = r##"!#$%&()*+,-./:;<=>?[\]^{|}~`@≤≥≠"##;
+pub const EXPRESSION_SPLIT_CHARS: &str = r#"!#$%&()*+,-./:;<=>?[\]^{|}~`@≤≥≠"#;
 
 /// A string, or a number.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +23,9 @@ impl StringOrNumber {
     /// - Number: not equal to zero (this means NaN is true)
     pub fn is_truthy(&self) -> bool {
         match self {
-            StringOrNumber::String(s) => !s.is_empty() && s.as_str() != "0" && s.as_str() != "false",
+            StringOrNumber::String(s) => {
+                !s.is_empty() && s.as_str() != "0" && s.as_str() != "false"
+            }
             StringOrNumber::Number(n) => *n != 0.0,
         }
     }
@@ -39,9 +37,12 @@ impl StringOrNumber {
     pub fn as_number(&self) -> f32 {
         match self {
             StringOrNumber::String(s) => {
-                if s.is_empty() { 0.0 }
-                else { s.parse().unwrap_or(std::f32::NAN) }
-            },
+                if s.is_empty() {
+                    0.0
+                } else {
+                    s.parse().unwrap_or(std::f32::NAN)
+                }
+            }
             StringOrNumber::Number(n) => *n,
         }
     }
@@ -57,23 +58,33 @@ impl StringOrNumber {
 }
 
 impl Default for StringOrNumber {
-    fn default() -> StringOrNumber { StringOrNumber::String(CompactString::new("")) }
+    fn default() -> StringOrNumber {
+        StringOrNumber::String(CompactString::new(""))
+    }
 }
 
 impl From<String> for StringOrNumber {
-    fn from(string: String) -> StringOrNumber { StringOrNumber::String(string.into()) }
+    fn from(string: String) -> StringOrNumber {
+        StringOrNumber::String(string.into())
+    }
 }
 
 impl From<CompactString> for StringOrNumber {
-    fn from(string: CompactString) -> StringOrNumber { StringOrNumber::String(string) }
+    fn from(string: CompactString) -> StringOrNumber {
+        StringOrNumber::String(string)
+    }
 }
 
 impl From<f32> for StringOrNumber {
-    fn from(f: f32) -> StringOrNumber { StringOrNumber::Number(f) }
+    fn from(f: f32) -> StringOrNumber {
+        StringOrNumber::Number(f)
+    }
 }
 
 impl From<bool> for StringOrNumber {
-    fn from(b: bool) -> StringOrNumber { StringOrNumber::Number(if b { 1.0 } else { 0.0 }) }
+    fn from(b: bool) -> StringOrNumber {
+        StringOrNumber::Number(if b { 1.0 } else { 0.0 })
+    }
 }
 
 impl FromStr for StringOrNumber {
@@ -81,11 +92,13 @@ impl FromStr for StringOrNumber {
     fn from_str(i: &str) -> Result<StringOrNumber, String> {
         if let Ok(x) = i.parse() {
             Ok(StringOrNumber::Number(x))
-        }
-        else if let Some(x) = i.find(|x| EXPRESSION_SPLIT_CHARS.contains(x)) {
-            Err(format!("character {:?} is not allowed in a flow control string", x))
-        }
-        else {
+        } else if let Some(x) = i.find(|x| EXPRESSION_SPLIT_CHARS.contains(x))
+        {
+            Err(format!(
+                "character {:?} is not allowed in a flow control string",
+                x
+            ))
+        } else {
             Ok(StringOrNumber::String(i.to_compact_string()))
         }
     }
@@ -94,16 +107,18 @@ impl FromStr for StringOrNumber {
 impl PartialOrd<StringOrNumber> for StringOrNumber {
     fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
         match (self, rhs) {
-            (StringOrNumber::String(lhs), StringOrNumber::String(rhs)) =>
-                lhs.partial_cmp(rhs),
-            (StringOrNumber::Number(lhs), StringOrNumber::Number(rhs)) =>
-                lhs.partial_cmp(rhs),
+            (StringOrNumber::String(lhs), StringOrNumber::String(rhs)) => {
+                lhs.partial_cmp(rhs)
+            }
+            (StringOrNumber::Number(lhs), StringOrNumber::Number(rhs)) => {
+                lhs.partial_cmp(rhs)
+            }
             _ => None,
         }
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Sound {
     // All times are in seconds
     // unique within a soundtrack
@@ -117,7 +132,7 @@ pub(crate) struct Sound {
     pub(crate) stream: bool,
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum SequenceElement {
     PlaySound {
         sound: CompactString,
@@ -133,11 +148,11 @@ pub(crate) enum SequenceElement {
         fade_out: PosFloat,
     },
     PlaySequence {
-        sequence: CompactString
+        sequence: CompactString,
     },
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Sequence {
     // unique within a soundtrack
     pub(crate) name: CompactString,
@@ -148,22 +163,26 @@ pub(crate) struct Sequence {
 impl Sequence {
     /// Call the given handlers at least once with every sound or sequence
     /// directly used by this Sequence.
-    pub fn find_all_direct_dependencies<A,B>(&self, mut found_sound: A, mut found_sequence: B)
-    where A: FnMut(&str), B: FnMut(&str) {
+    pub fn find_all_direct_dependencies<A, B>(
+        &self,
+        mut found_sound: A,
+        mut found_sequence: B,
+    ) where
+        A: FnMut(&str),
+        B: FnMut(&str),
+    {
         for (_time, element) in self.elements.iter() {
             match element {
-                SequenceElement::PlaySound { sound, .. } => {
-                    found_sound(sound)
-                },
+                SequenceElement::PlaySound { sound, .. } => found_sound(sound),
                 SequenceElement::PlaySequence { sequence } => {
                     found_sequence(sequence)
-                },
+                }
             }
         }
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum Command {
     /// Conclude the current node without running any more commands.
     Done,
@@ -210,7 +229,7 @@ pub(crate) enum Command {
     Placeholder,
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Node {
     pub(crate) name: Option<CompactString>,
     pub(crate) commands: Vec<Command>,
@@ -218,11 +237,14 @@ pub(crate) struct Node {
 
 impl Node {
     pub fn new() -> Node {
-        Node { name: None, commands: vec![] }
+        Node {
+            name: None,
+            commands: vec![],
+        }
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Flow {
     // unique within a soundtrack
     pub(crate) name: CompactString,
@@ -233,9 +255,18 @@ pub(crate) struct Flow {
 impl Flow {
     /// Call the given handlers at least once with every Sound or Sequence
     /// directly used by this Flow.
-    pub fn find_all_direct_dependencies<A,B>(&self, mut found_sound: A, mut found_sequence: B)
-    where A: FnMut(&str), B: FnMut(&str) {
-        for node in Some(&self.start_node).into_iter().chain(self.nodes.values()) {
+    pub fn find_all_direct_dependencies<A, B>(
+        &self,
+        mut found_sound: A,
+        mut found_sequence: B,
+    ) where
+        A: FnMut(&str),
+        B: FnMut(&str),
+    {
+        for node in Some(&self.start_node)
+            .into_iter()
+            .chain(self.nodes.values())
+        {
             for command in node.commands.iter() {
                 use Command::*;
                 match command {
@@ -256,13 +287,16 @@ impl Flow {
     /// indirectly. Calls the `missing_sound` and `missing_sequence` functions
     /// exactly once for each sound or sequence that is referred to, but not
     /// (currently) present within the Soundtrack.
-    pub fn find_all_sounds<A,B>(
+    pub fn find_all_sounds<A, B>(
         &self,
         soundtrack: &Soundtrack,
         mut missing_sound: A,
-        mut missing_sequence: B
+        mut missing_sequence: B,
     ) -> Vec<Arc<Sound>>
-    where A: FnMut(&str), B: FnMut(&str) {
+    where
+        A: FnMut(&str),
+        B: FnMut(&str),
+    {
         let mut found_sounds = HashSet::new();
         let mut found_sequences = HashSet::new();
         let mut found_sound;
@@ -285,28 +319,38 @@ impl Flow {
                 }
             }
         };
-        self.find_all_direct_dependencies(&mut found_sound, &mut found_sequence);
+        self.find_all_direct_dependencies(
+            &mut found_sound,
+            &mut found_sequence,
+        );
         let mut n = 0;
         while n < indirects.len() {
             if let Some(sequence) = soundtrack.sequences.get(&indirects[n]) {
                 let mut found_sequence = |sequence_name: &str| {
                     if !found_sequences.contains(sequence_name) {
-                        found_sequences.insert(sequence_name.to_compact_string());
+                        found_sequences
+                            .insert(sequence_name.to_compact_string());
                         indirects.push(sequence_name.to_compact_string());
                         if !soundtrack.sequences.contains_key(sequence_name) {
                             missing_sequence(sequence_name);
                         }
                     }
                 };
-                sequence.find_all_direct_dependencies(&mut found_sound, &mut found_sequence)
+                sequence.find_all_direct_dependencies(
+                    &mut found_sound,
+                    &mut found_sequence,
+                )
             }
             n += 1;
         }
-        found_sounds.into_iter().filter_map(|k| soundtrack.sounds.get(&k).cloned()).collect()
+        found_sounds
+            .into_iter()
+            .filter_map(|k| soundtrack.sounds.get(&k).cloned())
+            .collect()
     }
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum PredicateOp {
     /// Push the value of the given `FlowControl`, empty string if unset.
     PushVar(CompactString),
@@ -384,4 +428,5 @@ pub(crate) enum PredicateOp {
     Negate,
 }
 
-#[cfg(test)] mod test;
+#[cfg(test)]
+mod test;

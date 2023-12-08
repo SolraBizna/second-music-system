@@ -1,9 +1,6 @@
 use super::*;
 
-use std::{
-    sync::Arc,
-    num::NonZeroUsize,
-};
+use std::{num::NonZeroUsize, sync::Arc};
 
 #[no_mangle]
 extern "C" fn SMS_Engine_new(
@@ -17,9 +14,10 @@ extern "C" fn SMS_Engine_new(
     if delegate.is_null() {
         panic!("SMS_Engine_new: delegate cannot be NULL!");
     }
-    let speaker_layout = speaker_layout_from_int(speaker_layout)
-        .expect("SMS_Engine_new: speaker_layout was not a valid \
-                 SMS_SPEAKER_LAYOUT_* constant");
+    let speaker_layout = speaker_layout_from_int(speaker_layout).expect(
+        "SMS_Engine_new: speaker_layout was not a valid \
+                 SMS_SPEAKER_LAYOUT_* constant",
+    );
     let background_loading = background_loading != 0;
     let delegate = unsafe { delegate.as_ref().unwrap() }.clone();
     if background_loading {
@@ -46,7 +44,9 @@ unsafe extern "C" fn SMS_Engine_free(p: *mut Engine) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn SMS_Engine_clone_commander(engine: *mut Engine) -> *mut Commander {
+unsafe extern "C" fn SMS_Engine_clone_commander(
+    engine: *mut Engine,
+) -> *mut Commander {
     if engine.is_null() {
         panic!("SMS_Engine_clone_commander: engine cannot be NULL!");
     }
@@ -55,7 +55,9 @@ unsafe extern "C" fn SMS_Engine_clone_commander(engine: *mut Engine) -> *mut Com
 }
 
 #[no_mangle]
-unsafe extern "C" fn SMS_Engine_copy_live_soundtrack(engine: *mut Engine) -> *mut Soundtrack {
+unsafe extern "C" fn SMS_Engine_copy_live_soundtrack(
+    engine: *mut Engine,
+) -> *mut Soundtrack {
     if engine.is_null() {
         panic!("SMS_Engine_copy_live_soundtrack: engine cannot be NULL!");
     }
@@ -64,7 +66,9 @@ unsafe extern "C" fn SMS_Engine_copy_live_soundtrack(engine: *mut Engine) -> *mu
 }
 
 #[no_mangle]
-unsafe extern "C" fn SMS_Engine_get_speaker_layout(engine: *mut Engine) -> c_int {
+unsafe extern "C" fn SMS_Engine_get_speaker_layout(
+    engine: *mut Engine,
+) -> c_int {
     if engine.is_null() {
         panic!("SMS_Engine_get_speaker_layout: engine cannot be NULL!");
     }

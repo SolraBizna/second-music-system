@@ -6,20 +6,22 @@ macro_rules! target {
     ($target:expr, $function_name:expr) => {
         if $target.is_null() {
             panic!("{}: target cannot be NULL!", $function_name);
-        }
-        else {
+        } else {
             unsafe { $target.as_mut().unwrap() }
         }
-    }
+    };
 }
 
 macro_rules! fade_type {
     ($fade_type:expr, $function_name:expr) => {
         match fade_type_from_int($fade_type) {
             Some(x) => x,
-            None => panic!("{}: fade_type must be a valid SMS_FADE_TYPE_* constant!", $function_name),
+            None => panic!(
+                "{}: fade_type must be a valid SMS_FADE_TYPE_* constant!",
+                $function_name
+            ),
         }
-    }
+    };
 }
 
 macro_rules! implement_commands {
@@ -634,4 +636,7 @@ extern "C" fn [<$c_target _ kill_all_flows>](
 
 implement_commands!(SMS_Engine, Engine);
 implement_commands!(SMS_Commander, Commander);
-implement_commands!(SMS_Transaction, Transaction<'static, dyn EngineCommandIssuer>);
+implement_commands!(
+    SMS_Transaction,
+    Transaction<'static, dyn EngineCommandIssuer>
+);

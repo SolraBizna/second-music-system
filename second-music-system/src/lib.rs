@@ -1,14 +1,14 @@
 #![allow(clippy::useless_format)] // DELETEME
 
 use std::{
-    collections::HashMap,
     cmp::{Ordering, PartialOrd},
+    collections::HashMap,
     sync::Arc,
 };
 
 use arcow::Arcow;
 use compact_str::{CompactString, ToCompactString};
-use crossbeam::channel::{Sender, Receiver, unbounded};
+use crossbeam::channel::{unbounded, Receiver, Sender};
 
 #[macro_use]
 pub(crate) mod din;
@@ -17,14 +17,14 @@ mod data;
 mod delegate;
 mod engine;
 mod fader;
+mod posfloat;
 pub mod query;
 mod reader;
 mod runtime;
-mod posfloat;
 
-use data::*;
 #[doc(inline)]
 pub use data::StringOrNumber;
+use data::*;
 #[doc(inline)]
 pub use delegate::*;
 #[doc(inline)]
@@ -67,39 +67,75 @@ impl Default for Soundtrack {
     }
 }
 
-mod private { pub trait Sealed {} }
+mod private {
+    pub trait Sealed {}
+}
 
-pub trait Sample: private::Sealed + Send + Sync + Copy + Clone + 'static {
+pub trait Sample:
+    private::Sealed + Send + Sync + Copy + Clone + 'static
+{
     fn to_float_sample(&self) -> f32;
-    fn make_formatted_sound_reader_from(value: Box<dyn SoundReader<Self>>) -> FormattedSoundReader;
+    fn make_formatted_sound_reader_from(
+        value: Box<dyn SoundReader<Self>>,
+    ) -> FormattedSoundReader;
 }
 
 impl private::Sealed for u8 {}
 impl Sample for u8 {
-    fn to_float_sample(&self) -> f32 { (*self - 128) as f32 * (1.0 / 128.0) }
-    fn make_formatted_sound_reader_from(value: Box<dyn SoundReader<u8>>) -> FormattedSoundReader { FormattedSoundReader::U8(value) }
+    fn to_float_sample(&self) -> f32 {
+        (*self - 128) as f32 * (1.0 / 128.0)
+    }
+    fn make_formatted_sound_reader_from(
+        value: Box<dyn SoundReader<u8>>,
+    ) -> FormattedSoundReader {
+        FormattedSoundReader::U8(value)
+    }
 }
 
 impl private::Sealed for u16 {}
 impl Sample for u16 {
-    fn to_float_sample(&self) -> f32 { (*self - 32768) as f32 * (1.0 / 32768.0) }
-    fn make_formatted_sound_reader_from(value: Box<dyn SoundReader<u16>>) -> FormattedSoundReader { FormattedSoundReader::U16(value) }
+    fn to_float_sample(&self) -> f32 {
+        (*self - 32768) as f32 * (1.0 / 32768.0)
+    }
+    fn make_formatted_sound_reader_from(
+        value: Box<dyn SoundReader<u16>>,
+    ) -> FormattedSoundReader {
+        FormattedSoundReader::U16(value)
+    }
 }
 
 impl private::Sealed for i8 {}
 impl Sample for i8 {
-    fn to_float_sample(&self) -> f32 { *self as f32 * (1.0 / 128.0) }
-    fn make_formatted_sound_reader_from(value: Box<dyn SoundReader<i8>>) -> FormattedSoundReader { FormattedSoundReader::I8(value) }
+    fn to_float_sample(&self) -> f32 {
+        *self as f32 * (1.0 / 128.0)
+    }
+    fn make_formatted_sound_reader_from(
+        value: Box<dyn SoundReader<i8>>,
+    ) -> FormattedSoundReader {
+        FormattedSoundReader::I8(value)
+    }
 }
 
 impl private::Sealed for i16 {}
 impl Sample for i16 {
-    fn to_float_sample(&self) -> f32 { *self as f32 * (1.0 / 32768.0) }
-    fn make_formatted_sound_reader_from(value: Box<dyn SoundReader<i16>>) -> FormattedSoundReader { FormattedSoundReader::I16(value) }
+    fn to_float_sample(&self) -> f32 {
+        *self as f32 * (1.0 / 32768.0)
+    }
+    fn make_formatted_sound_reader_from(
+        value: Box<dyn SoundReader<i16>>,
+    ) -> FormattedSoundReader {
+        FormattedSoundReader::I16(value)
+    }
 }
 
 impl private::Sealed for f32 {}
 impl Sample for f32 {
-    fn to_float_sample(&self) -> f32 { *self }
-    fn make_formatted_sound_reader_from(value: Box<dyn SoundReader<f32>>) -> FormattedSoundReader { FormattedSoundReader::F32(value) }
+    fn to_float_sample(&self) -> f32 {
+        *self
+    }
+    fn make_formatted_sound_reader_from(
+        value: Box<dyn SoundReader<f32>>,
+    ) -> FormattedSoundReader {
+        FormattedSoundReader::F32(value)
+    }
 }

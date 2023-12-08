@@ -6,7 +6,9 @@ unsafe extern "C" fn SMS_BooleanResponse_free(p: *mut query::Response<bool>) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn SMS_BooleanResponse_poll(p: *mut query::Response<bool>) -> c_int {
+unsafe extern "C" fn SMS_BooleanResponse_poll(
+    p: *mut query::Response<bool>,
+) -> c_int {
     if p.is_null() {
         panic!("SMS_BooleanResponse_poll: instance cannot be NULL!");
     }
@@ -15,7 +17,9 @@ unsafe extern "C" fn SMS_BooleanResponse_poll(p: *mut query::Response<bool>) -> 
 }
 
 #[no_mangle]
-unsafe extern "C" fn SMS_BooleanResponse_get(p: *mut query::Response<bool>) -> c_int {
+unsafe extern "C" fn SMS_BooleanResponse_get(
+    p: *mut query::Response<bool>,
+) -> c_int {
     if p.is_null() {
         panic!("SMS_BooleanResponse_poll: instance cannot be NULL!");
     }

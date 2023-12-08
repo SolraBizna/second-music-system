@@ -6,7 +6,9 @@ unsafe extern "C" fn SMS_Commander_free(p: *mut Commander) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn SMS_Commander_clone_commander(commander: *mut Commander) -> *mut Commander {
+unsafe extern "C" fn SMS_Commander_clone_commander(
+    commander: *mut Commander,
+) -> *mut Commander {
     if commander.is_null() {
         panic!("SMS_Commander_clone_commander: engine cannot be NULL!");
     }

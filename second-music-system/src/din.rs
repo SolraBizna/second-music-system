@@ -70,11 +70,15 @@ impl Iterator for DinParser<'_> {
                 .map(|(i, _)| i)
                 .unwrap_or(self.rem.len());
             let line = &self.rem[..end_index];
-            let parsed =
-                match shellish_parse::parse(unsafe { std::str::from_utf8_unchecked(line) }, true) {
-                    Ok(x) => x,
-                    Err(x) => return Some(Err(format!("line {}: {}", self.lineno, x))),
-                };
+            let parsed = match shellish_parse::parse(
+                unsafe { std::str::from_utf8_unchecked(line) },
+                true,
+            ) {
+                Ok(x) => x,
+                Err(x) => {
+                    return Some(Err(format!("line {}: {}", self.lineno, x)))
+                }
+            };
             if !parsed.is_empty() {
                 self.nodes_to_yield
                     .push(ParseItem::BeginNode(parsed, self.lineno));
@@ -140,7 +144,9 @@ pub fn parse_din(src: &str) -> Result<Vec<DinNode>, String> {
 
 impl DinNode {
     /// Consume and yield all children.
-    pub fn consume_children<'a>(&'a mut self) -> impl 'a + Iterator<Item = DinNode> {
+    pub fn consume_children<'a>(
+        &'a mut self,
+    ) -> impl 'a + Iterator<Item = DinNode> {
         self.consume_predicated_children(|_| true)
     }
     /// Consume and yield all children that match the predicate.
@@ -168,7 +174,9 @@ impl DinNode {
         &'a mut self,
         names: &'a [&'a str],
     ) -> impl 'a + Iterator<Item = DinNode> {
-        self.consume_predicated_children(|x| names.iter().any(|y| *y == x.items[0].as_str()))
+        self.consume_predicated_children(|x| {
+            names.iter().any(|y| *y == x.items[0].as_str())
+        })
     }
     /// If there is one child named `name`, consume and yield it. If there are
     /// none, return `Ok(None)`. If there was more than one, return an error.
@@ -192,7 +200,10 @@ impl DinNode {
     }
     /// If there is one child named `name`, consume and yield it. If there are
     /// none, an error. If there was more than one, return an error.
-    pub fn consume_required_prefixed_child(&mut self, name: &str) -> Result<DinNode, String> {
+    pub fn consume_required_prefixed_child(
+        &mut self,
+        name: &str,
+    ) -> Result<DinNode, String> {
         let lineno = self.lineno;
         let mut iter = self.consume_prefixed_children(name);
         let ret = iter.next();
@@ -206,21 +217,22 @@ impl DinNode {
         } else if let Some(ret) = ret {
             Ok(ret)
         } else {
-            Err(format!(
-                "line {}: one {name:?} child is required",
-                lineno
-            ))
+            Err(format!("line {}: one {name:?} child is required", lineno))
         }
     }
     /// If there are any unconsumed children left, return an error saying that
     /// those children were not understood. If there are none, return `Ok(())`.
     pub fn finish_parsing_children(self) -> Result<(), String> {
         let mut count = 0;
-        let mut error = "the following nodes were not understood:\n".to_string();
+        let mut error =
+            "the following nodes were not understood:\n".to_string();
         for child in self.children {
             if let Some(child) = child {
                 count += 1;
-                error.push_str(&format!("\tline {}: {:?}\n", child.lineno, child.items[0]));
+                error.push_str(&format!(
+                    "\tline {}: {:?}\n",
+                    child.lineno, child.items[0]
+                ));
             }
         }
         if count > 0 {
