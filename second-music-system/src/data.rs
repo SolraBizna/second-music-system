@@ -8,7 +8,7 @@ mod parse;
 
 // ASCII printable non-digit non-letter characters (excluding underscore and
 // space and quote marks), and also throw in the funky inequality chars
-pub const EXPRESSION_SPLIT_CHARS: &str = r#"!#$%&()*+,-./:;<=>?[\]^{|}~`@≤≥≠"#;
+pub const EXPRESSION_SPLIT_CHARS: &str = r"!#$%&()*+,-./:;<=>?[\]^{|}~`@≤≥≠";
 
 /// A string, or a number.
 #[derive(Debug, Clone, PartialEq)]

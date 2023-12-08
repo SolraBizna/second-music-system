@@ -144,9 +144,9 @@ pub fn parse_din(src: &str) -> Result<Vec<DinNode>, String> {
 
 impl DinNode {
     /// Consume and yield all children.
-    pub fn consume_children<'a>(
-        &'a mut self,
-    ) -> impl 'a + Iterator<Item = DinNode> {
+    pub fn consume_children(
+        &'_ mut self,
+    ) -> impl '_ + Iterator<Item = DinNode> {
         self.consume_predicated_children(|_| true)
     }
     /// Consume and yield all children that match the predicate.
@@ -226,14 +226,12 @@ impl DinNode {
         let mut count = 0;
         let mut error =
             "the following nodes were not understood:\n".to_string();
-        for child in self.children {
-            if let Some(child) = child {
-                count += 1;
-                error.push_str(&format!(
-                    "\tline {}: {:?}\n",
-                    child.lineno, child.items[0]
-                ));
-            }
+        for child in self.children.into_iter().flatten() {
+            count += 1;
+            error.push_str(&format!(
+                "\tline {}: {:?}\n",
+                child.lineno, child.items[0]
+            ));
         }
         if count > 0 {
             return Err(error);

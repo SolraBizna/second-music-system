@@ -67,22 +67,23 @@ impl Sound {
             Some(x) => *x + offset,
             None => PosFloat::ZERO,
         };
-        let end =
-            match (time_data.get("end"), time_data.get("length")) {
-                (Some(_), Some(_)) => {
-                    return Err(format!(
-                        "line {}: only one of \"end\" and \"
+        let end = match (time_data.get("end"), time_data.get("length")) {
+            (Some(_), Some(_)) => {
+                return Err(format!(
+                    "line {}: only one of \"end\" and \"
                 length\" may be specified, not both",
-                        node.lineno
-                    ))
-                }
-                (Some(x), None) => *x + offset,
-                (None, Some(x)) => start + *x,
-                (None, None) => return Err(format!(
+                    node.lineno
+                ))
+            }
+            (Some(x), None) => *x + offset,
+            (None, Some(x)) => start + *x,
+            (None, None) => {
+                return Err(format!(
                     "line {}: one of \"end\" or \"length\" must be specified",
                     node.lineno
-                )),
-            };
+                ))
+            }
+        };
         node.finish_parsing_children()?;
         // TODO: fade out requires length
         let path = match path {
@@ -212,17 +213,14 @@ impl SequenceElement {
         };
         let length = match (data.get("for"), data.get("until")) {
             (Some(_), Some(_)) => {
-                return Err(format!("line {}: only one of \"for\" and \"until\" may be specified, not both", node.lineno))
-            },
-            (None, None) => {
-                None
-            },
-            (Some(length), None) => {
-                Some(*length)
-            },
-            (None, Some(end)) => {
-                Some(end.saturating_sub(start))
-            },
+                return Err(format!(
+                    "line {}: only one of \"for\" and \"until\" may be specified, not both",
+                    node.lineno
+                ))
+            }
+            (None, None) => None,
+            (Some(length), None) => Some(*length),
+            (None, Some(end)) => Some(end.saturating_sub(start)),
         };
         let (length, fade_out) = match data.get("fade_out") {
             Some(fade_out) => {
@@ -275,18 +273,26 @@ fn parse_flow_command_tokens(
             let token = tokens.get(1).map(String::as_str);
             match token {
                 Some("sequence") | Some("sound") => (),
-                _ => return Err("next element after \"play\" must be \"sequence\" or \"sound\"".to_string())
+                _ => {
+                    return Err(
+                        "next element after \"play\" must be \"sequence\" or \"sound\"".to_string(),
+                    )
+                }
             }
             let target = match tokens.get(2) {
                 Some(x) => x,
-                None => return Err(format!("next element after \"{}\" must be the name of the {} to play", token.unwrap(), token.unwrap())),
-            }.to_compact_string();
+                None => {
+                    return Err(format!(
+                        "next element after \"{}\" must be the name of the {} to play",
+                        token.unwrap(),
+                        token.unwrap()
+                    ))
+                }
+            }
+            .to_compact_string();
             let and_wait = if tokens.len() == 3 {
                 false
-            } else if tokens.len() == 5
-                && tokens[3] == "and"
-                && tokens[4] == "wait"
-            {
+            } else if tokens.len() == 5 && tokens[3] == "and" && tokens[4] == "wait" {
                 true
             } else {
                 return Err("the only thing allowed after the name of the sequence or sound to play is the elements \"and wait\" (do you need quotation marks?)".to_string());
@@ -299,17 +305,25 @@ fn parse_flow_command_tokens(
                 _ => unreachable!(),
             }))
         }
-        "start" | "restart" | "stop" => {
-            match tokens.get(1).map(String::as_str) {
-                Some("node") => {
-                    let target = match tokens.get(2) {
-                        Some(x) => x,
-                        None => return Err(format!("next element after \"node\" must be the name of the node to {}", tokens[0])),
-                    }.to_compact_string();
-                    if tokens.len() != 3 {
-                        return Err("nothing is allowed after the node name (do you need quotation marks?)".to_string())
-                    };
-                    match tokens[0].as_str() {
+        "start" | "restart" | "stop" => match tokens.get(1).map(String::as_str) {
+            Some("node") => {
+                let target = match tokens.get(2) {
+                    Some(x) => x,
+                    None => {
+                        return Err(format!(
+                            "next element after \"node\" must be the name of the node to {}",
+                            tokens[0]
+                        ))
+                    }
+                }
+                .to_compact_string();
+                if tokens.len() != 3 {
+                    return Err(
+                        "nothing is allowed after the node name (do you need quotation marks?)"
+                            .to_string(),
+                    );
+                };
+                match tokens[0].as_str() {
                         "start" => Ok(Some(Command::StartNode(target))),
                         "restart" => Ok(Some(Command::RestartNode(target))),
                         "stop" => {
@@ -317,49 +331,64 @@ fn parse_flow_command_tokens(
                         }
                         _ => unreachable!(),
                     }
-                },
-                Some("starting") => {
-                    if tokens.get(0).map(String::as_str) != Some("restart") {
-                        return Err(format!("next element after \"restart\" must be \"node\" or \"starting\""))
-                    }
-                    if tokens.get(2).map(String::as_str) != Some("node") {
-                        return Err(format!("next element after \"starting\" must be \"node\""))
-                    }
-                    if tokens.len() != 3 {
-                        return Err(format!("nothing is allowed after \"restart starting node\""))
-                    }
-                    Ok(Some(Command::RestartFlow))
-                },
-                Some(x) => Err(format!("invalid element \"{}\" next element after {:?} must be \"node\" or \"starting\"", x, tokens[0])),
-                None => Err(format!("\"{:?}\" must be followed by \"node\" or \"starting\"", tokens[0]))
             }
-        }
+            Some("starting") => {
+                if tokens.get(0).map(String::as_str) != Some("restart") {
+                    return Err(format!(
+                        "next element after \"restart\" must be \"node\" or \"starting\""
+                    ));
+                }
+                if tokens.get(2).map(String::as_str) != Some("node") {
+                    return Err(format!("next element after \"starting\" must be \"node\""));
+                }
+                if tokens.len() != 3 {
+                    return Err(format!(
+                        "nothing is allowed after \"restart starting node\""
+                    ));
+                }
+                Ok(Some(Command::RestartFlow))
+            }
+            Some(x) => Err(format!(
+                "invalid element \"{}\" next element after {:?} must be \"node\" or \"starting\"",
+                x, tokens[0]
+            )),
+            None => Err(format!(
+                "\"{:?}\" must be followed by \"node\" or \"starting\"",
+                tokens[0]
+            )),
+        },
         "fade" => {
             if tokens.get(1).map(String::as_str) != Some("node") {
-                return Err(
-                    "next element after \"fade\" must be \"node\"".to_string()
-                );
+                return Err("next element after \"fade\" must be \"node\"".to_string());
             }
             let target = match tokens.get(2) {
                 Some(x) => x,
-                None => return Err("next element after \"node\" must be the name of the node to fade".to_string()),
-            }.to_compact_string();
+                None => {
+                    return Err(
+                        "next element after \"node\" must be the name of the node to fade"
+                            .to_string(),
+                    )
+                }
+            }
+            .to_compact_string();
             if tokens.get(3).map(String::as_str) != Some("over") {
-                return Err("next element after node name must be \"over\""
-                    .to_string());
+                return Err("next element after node name must be \"over\"".to_string());
             }
             let length = timebases.parse_time(&tokens[3..])?;
             Ok(Some(Command::FadeNodeOut(target, length)))
         }
         "set" => {
-            let target = match tokens.get(1) {
-                Some(x) => x,
-                None => return Err("next element after \"set\" must be the name of the flow control to set".to_string()),
-            }.to_compact_string();
+            let target =
+                match tokens.get(1) {
+                    Some(x) => x,
+                    None => return Err(
+                        "next element after \"set\" must be the name of the flow control to set"
+                            .to_string(),
+                    ),
+                }
+                .to_compact_string();
             if tokens.get(2).map(String::as_str) != Some("to") {
-                return Err(
-                    "next element after node name must be \"to\"".to_string()
-                );
+                return Err("next element after node name must be \"to\"".to_string());
             }
             Ok(Some(Command::Set(target, parse_expression(&tokens[3..])?)))
         }
@@ -368,26 +397,17 @@ fn parse_flow_command_tokens(
             let (condition, rest) = parse_condition(&tokens[1..])?;
             let command = match parse_flow_command_tokens(rest, timebases)? {
                 Some(x) => x,
-                None => {
-                    return Err(
-                        "there needs to be a command after the \"then\""
-                            .to_string(),
-                    )
-                }
+                None => return Err("there needs to be a command after the \"then\"".to_string()),
             };
             Ok(Some(Command::If {
                 branches: vec![(condition, vec![command])],
                 fallback_branch: vec![],
             }))
         }
-        "else" => Err(
-            "else is not allowed here (try breaking it onto its own line)"
-                .to_string(),
-        ),
-        "elseif" => Err(
-            "elseif is not allowed here (try breaking it onto its own line)"
-                .to_string(),
-        ),
+        "else" => Err("else is not allowed here (try breaking it onto its own line)".to_string()),
+        "elseif" => {
+            Err("elseif is not allowed here (try breaking it onto its own line)".to_string())
+        }
         _ => Ok(None),
     }
 }
@@ -473,10 +493,16 @@ fn parse_flow_command_node(
         })))
     } else if node.items[0] == "else" {
         let (last_branches, last_fallback_branch) = match last_command {
-            Some(Command::If { branches, fallback_branch }) => (branches, fallback_branch),
+            Some(Command::If {
+                branches,
+                fallback_branch,
+            }) => (branches, fallback_branch),
             _ => {
-                return Err(format!("line {}: \"else\" without matching \"if\" (check indentation)", node.lineno))
-            },
+                return Err(format!(
+                    "line {}: \"else\" without matching \"if\" (check indentation)",
+                    node.lineno
+                ))
+            }
         };
         if node.items.get(1).map(String::as_str) == Some("if") {
             // We are an else if
@@ -501,8 +527,11 @@ fn parse_flow_command_node(
         let last_branches = match last_command {
             Some(Command::If { branches, .. }) => branches,
             _ => {
-                return Err(format!("line {}: \"elseif\" without matching \"if\" (check indentation)", node.lineno))
-            },
+                return Err(format!(
+                    "line {}: \"elseif\" without matching \"if\" (check indentation)",
+                    node.lineno
+                ))
+            }
         };
         let mut items = vec![];
         std::mem::swap(&mut items, &mut node.items);
@@ -563,7 +592,7 @@ impl Flow {
         let mut nodes = flows
             .get(&name)
             .map(|x| x.nodes.clone())
-            .unwrap_or_else(|| HashMap::new());
+            .unwrap_or_default();
         let mut start_node = Node::new();
         for mut child in node.consume_children() {
             debug_assert!(!child.items.is_empty());
@@ -616,7 +645,7 @@ impl Soundtrack {
                     let sound = Sound::parse_din_node(node, &timebases, name.clone())?;
                     debug_assert_eq!(sound.name, name);
                     self.sounds.insert(name, Arc::new(sound));
-                },
+                }
                 "sequence" => {
                     let mut name = None;
                     parse_din_node!(node, "sequence" name=*)?;
@@ -624,14 +653,29 @@ impl Soundtrack {
                     let sequence = Sequence::parse_din_node(node, &timebases, name.clone())?;
                     debug_assert_eq!(sequence.name, name);
                     self.sequences.insert(name, Arc::new(sequence));
-                },
+                }
                 "flow" => {
                     let flow = Flow::parse_din_node(node, &timebases, &self.flows)?;
                     self.flows.insert(flow.name.clone(), Arc::new(flow));
-                },
-                "region" => return Err(format!("line {}: regions may only exist inside sequences (check indentation)", node.lineno)),
-                "node" => return Err(format!("line {}: nodes may only exist inside flows (check indentation)", node.lineno)),
-                x => return Err(format!("line {}: unknown top-level element {:?}", node.lineno, x)),
+                }
+                "region" => {
+                    return Err(format!(
+                        "line {}: regions may only exist inside sequences (check indentation)",
+                        node.lineno
+                    ))
+                }
+                "node" => {
+                    return Err(format!(
+                        "line {}: nodes may only exist inside flows (check indentation)",
+                        node.lineno
+                    ))
+                }
+                x => {
+                    return Err(format!(
+                        "line {}: unknown top-level element {:?}",
+                        node.lineno, x
+                    ))
+                }
             }
         }
         Ok(self)
