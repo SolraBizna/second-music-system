@@ -1416,6 +1416,7 @@ impl Engine {
                 );
                 self.node_volumes.retain(|node_id, _| node_id.0 != k);
                 self.active_flow_nodes.retain(|afn| afn.flow_name != k);
+                self.flows_fading_out.retain(|flow_name| flow_name != k);
                 false
             }
         });
