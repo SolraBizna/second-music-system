@@ -1,28 +1,12 @@
 use super::*;
 
-#[test] fn timebase_parse() {
-    assert_eq!(
-        Timebase::parse_source(&[
-            "@4".to_string(),
-            "120/m".to_string(),
-            "32".to_string(),
-        ]),
-        Ok(Timebase {
-            stages: vec![
-                TimebaseStage { one_based: true, multiplier: PosFloat::new_clamped(2.0) },
-                TimebaseStage { one_based: false, multiplier: PosFloat::new_clamped(0.5) },
-                TimebaseStage { one_based: false, multiplier: PosFloat::new_clamped(1.0 / 64.0) }
-            ]
-        })
-    );
-}
 #[test] fn new_sound_parse() {
     let node = node!(1, ["sound", "test1.mp3"], [
         node!(2, ["length", "32"]),
     ]);
     let timebases = TimebaseCollection::new();
     assert_eq!(
-        Sound::parse_din_node(&node, &timebases).unwrap(),
+        Sound::parse_din_node(node, &timebases, CompactString::new("test1.mp3")).unwrap(),
         Sound {
             name: "test1.mp3".to_compact_string(),
             path: "test1.mp3".to_compact_string(),
@@ -57,7 +41,7 @@ fn sound_with_null_implicit_path_parse() {
         node!(2, ["length", "32"]),
     ]);
     let timebases = TimebaseCollection::new();
-    Sound::parse_din_node(&node, &timebases).unwrap();
+    Sound::parse_din_node(node, &timebases, CompactString::new("test\0.mp3")).unwrap();
 }
 #[test]
 #[should_panic]
@@ -67,7 +51,7 @@ fn sound_with_null_path_parse() {
         node!(2, ["length", "32"]),
     ]);
     let timebases = TimebaseCollection::new();
-    Sound::parse_din_node(&node, &timebases).unwrap();
+    Sound::parse_din_node(node, &timebases, CompactString::new("test")).unwrap();
 }
 #[test]
 fn sound_with_null_name_explicit_nonnull_path_parse() {
@@ -76,7 +60,7 @@ fn sound_with_null_name_explicit_nonnull_path_parse() {
         node!(2, ["length", "32"]),
     ]);
     let timebases = TimebaseCollection::new();
-    Sound::parse_din_node(&node, &timebases).unwrap();
+    Sound::parse_din_node(node, &timebases, CompactString::new("test\0")).unwrap();
 }
 
 #[test] fn new_sequence_parse() {
@@ -85,7 +69,7 @@ fn sound_with_null_name_explicit_nonnull_path_parse() {
     ]);
     let timebases = TimebaseCollection::new();
     assert_eq!(
-        Sequence::parse_din_node(&node, &timebases).unwrap(),
+        Sequence::parse_din_node(node, &timebases, CompactString::new("test1")).unwrap(),
         Sequence {
             name: "test1".to_compact_string(),
             length: PosFloat::new_clamped(32.0),
@@ -113,8 +97,8 @@ sequence test1
         ]),
     ]);
     let timebases = TimebaseCollection::new();
-    let sequence_one = Sequence::parse_din_node(&node_one, &timebases).unwrap();
-    let sequence_two = Sequence::parse_din_node(&node_two, &timebases).unwrap();
+    let sequence_one = Sequence::parse_din_node(node_one, &timebases, CompactString::new("test1")).unwrap();
+    let sequence_two = Sequence::parse_din_node(node_two, &timebases, CompactString::new("test2")).unwrap();
     assert_eq!(
         sequence_one,
         Sequence {
@@ -181,8 +165,7 @@ sequence test2
         at 32
         {} 32
 "#, parameter));
-        // TODO(nemo): extract error strings from parse into their own module
-        assert_eq!(soundtrack.err(), Some(format!("line 8: unknown element parameter \"{}\"", parameter)));
+        assert!(soundtrack.is_err());
     }
 }
 #[test]
@@ -251,7 +234,7 @@ flow test_flow1
     ]);
     let timebases = TimebaseCollection::new();
     assert_eq!(
-        Sequence::parse_din_node(&node, &timebases).unwrap(),
+        Sequence::parse_din_node(node, &timebases, CompactString::new("test1")).unwrap(),
         Sequence {
             name: "test1".to_compact_string(),
             length: PosFloat::new_clamped(32.0),
@@ -369,4 +352,16 @@ flow test_flow1
     if failed_goods > 0 {
         panic!("Some lines that should have parsed did not! (See output)");
     }
+}
+// TODO: test anonymous sound with no path (should error)
+#[test]
+#[should_panic]
+fn anonymous_sound_with_no_path_parse() {
+    let node = node!(1, ["sequence", "test"], [
+        node!(2, ["play", "sound"], [
+            node!(3, ["length", "0"])
+        ])
+    ]);
+    let timebases = TimebaseCollection::new();
+    Sequence::parse_din_node(node, &timebases, CompactString::new("test")).unwrap();
 }

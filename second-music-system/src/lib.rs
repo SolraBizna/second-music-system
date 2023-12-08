@@ -11,7 +11,7 @@ use compact_str::{CompactString, ToCompactString};
 use crossbeam::channel::{Sender, Receiver, unbounded};
 
 #[macro_use]
-mod din;
+pub(crate) mod din;
 
 mod data;
 mod delegate;

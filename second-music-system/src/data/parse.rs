@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 use super::*;
 
@@ -8,405 +7,57 @@ use din::*;
 mod expression;
 use expression::{parse_condition, parse_expression};
 
+mod timebase;
+use timebase::*;
+
 #[cfg(test)]
 mod test;
 
-// I hate this name but we couldn't find a better one quickly
-#[derive(Debug,PartialEq)]
-struct TimebaseStage {
-    one_based: bool,
-    multiplier: PosFloat,
-}
-
-#[derive(Debug,PartialEq)]
-struct Timebase {
-    stages: Vec<TimebaseStage>,
-}
-
-static DEFAULT_TIMEBASE: Lazy<Timebase> = Lazy::new(|| {
-    Timebase {
-        stages: vec![
-            TimebaseStage { one_based: false, multiplier: PosFloat::ONE },
-        ],
-    }
-});
-
-#[derive(Debug,Copy,Clone)]
-enum TimebaseSuffix {
-    Seconds, Milliseconds, Microseconds, Nanoseconds,
-    Minutes, Hours, Days,
-}
-
-impl TimebaseSuffix {
-    /// How many seconds per tick, given `x` ticks per `self`?
-    fn num_per(&self, x: PosFloat) -> PosFloat {
-        use TimebaseSuffix::*;
-        match self {
-            Seconds => PosFloat::ONE / x,
-            Milliseconds => PosFloat::ONE / (x * PosFloat::THOUSAND),
-            Microseconds => PosFloat::ONE / (x * PosFloat::MILLION),
-            Nanoseconds => PosFloat::ONE / (x * PosFloat::BILLION),
-            Minutes => PosFloat::SECONDS_PER_MINUTE / x,
-            Hours => PosFloat::SECONDS_PER_HOUR / x,
-            Days => PosFloat::SECONDS_PER_DAY / x,
-        }
-    }
-    /// How many seconds per tick, given that each tick is `x` `self`s?
-    fn num_times(&self, x: PosFloat) -> PosFloat {
-        use TimebaseSuffix::*;
-        match self {
-            Seconds => x,
-            Milliseconds => x / PosFloat::THOUSAND,
-            Microseconds => x / PosFloat::MILLION,
-            Nanoseconds => x / PosFloat::BILLION,
-            Minutes => PosFloat::SECONDS_PER_MINUTE * x,
-            Hours => PosFloat::SECONDS_PER_HOUR * x,
-            Days => PosFloat::SECONDS_PER_DAY * x,
-        }
-    }
-}
-
-static TIMEBASE_SUFFIX_MAP: Lazy<HashMap<&'static str, TimebaseSuffix>>
-= Lazy::new(|| {
-    use TimebaseSuffix::*;
-    [
-        ("s", Seconds), ("sec", Seconds), ("second", Seconds),
-        ("ms", Milliseconds), ("msec", Milliseconds),
-        ("msecond", Milliseconds), ("millis", Milliseconds),
-        ("millisec", Milliseconds), ("millisecond", Milliseconds),
-        ("us", Microseconds), ("usec", Microseconds),
-        ("usecond", Microseconds), ("µs", Microseconds),
-        ("µsec", Microseconds), ("µsecond", Microseconds),
-        ("micros", Microseconds), ("microsec", Microseconds),
-        ("microsecond", Microseconds),
-        ("ns", Nanoseconds), ("nsec", Nanoseconds),
-        ("nsecond", Nanoseconds), ("nanos", Nanoseconds),
-        ("nanosec", Nanoseconds), ("nanosecond", Nanoseconds),
-        ("m", Minutes), ("min", Minutes), ("minute", Minutes),
-        ("h", Hours), ("hr", Hours), ("hour", Hours),
-        ("d", Days), ("day", Days),
-    ].into_iter().collect()
-});
-
-enum TimeSpec {
-    Basic,
-    PerSuffix(TimebaseSuffix),
-    TimesSuffix(TimebaseSuffix),
-}
-
-impl Timebase {
-    fn parse_stage(mut source: &str) -> Result<(bool, PosFloat, TimeSpec), String> {
-        let one_based = if source.starts_with('@') {
-            source = &source[1..];
-            true
-        } else { false };
-        let end = source.find(|x: char| !x.is_ascii_digit() && x != '.');
-        let timespec = match end {
-            Some(x) => {
-                let suffix = &source[x..];
-                source = &source[..x];
-                let res = if let Some(x) = suffix.strip_prefix('/') {
-                    if source.is_empty() {
-                        return Err("Missing number".to_string())
-                    }
-                    TIMEBASE_SUFFIX_MAP.get(x)
-                        .map(|x| TimeSpec::PerSuffix(*x))
-                }
-                else {
-                    if source.is_empty() {
-                        source = "1";
-                    }
-                    TIMEBASE_SUFFIX_MAP.get(&suffix)
-                        .map(|x| TimeSpec::TimesSuffix(*x))
-                };
-                match res {
-                    Some(x) => x,
-                    None => return Err(format!("Unknown suffix: {:?}", suffix))
-                }
-            },
-            None => TimeSpec::Basic,
-        };
-        let number = match source.parse::<PosFloat>() {
-            Ok(x) => x,
-            Err(_) => return Err("Invalid number".to_string()),
-        };
-        Ok((one_based, number, timespec))
-    }
-    fn parse_source(source: &[String]) -> Result<Timebase, String> {
-        let mut stages: Vec<(bool, PosFloat)> = Vec::with_capacity(source.len());
-        let mut basis = None;
-        for (n, stage) in source.iter().enumerate() {
-            match Timebase::parse_stage(stage) {
-                Ok((one_based, number, timespec)) => {
-                    match timespec {
-                        TimeSpec::Basic => (),
-                        x => {
-                            if basis.is_none() {
-                                basis = Some((n, x));
-                            }
-                            else {
-                                return Err(format!("Resolution #{} contains a second basis. Only one basis is allowed.", n+1))
-                            }
-                        }
-                    }
-                    stages.push((one_based, number));
-                },
-                Err(x) => {
-                    return Err(format!("Error parsing resolution #{}: {}", n+1, x))
-                },
-            }
-        }
-        let (basis_index, basis_spec) = match basis {
-            Some(x) => x,
-            None => {
-                return Err("This timebase doesn't specify a basis (e.g. \"/minute\")".to_string())
-            },
-        };
-        let mut ret: Vec<TimebaseStage> = Vec::with_capacity(stages.len());
-        let mut iter = stages.into_iter().enumerate();
-        for (n, (one_based, mut multiplier)) in &mut iter {
-            if n == basis_index {
-                match basis_spec {
-                    TimeSpec::Basic => unreachable!(),
-                    TimeSpec::PerSuffix(x) => multiplier = x.num_per(multiplier),
-                    TimeSpec::TimesSuffix(x) => multiplier = x.num_times(multiplier),
-                }
-            }
-            for x in ret.iter_mut() {
-                x.multiplier = x.multiplier * multiplier;
-            }
-            ret.push(TimebaseStage { one_based, multiplier });
-            if n == basis_index { break }
-        }
-        let mut multiplier = ret.last().unwrap().multiplier;
-        for (_, (one_based, number)) in &mut iter {
-            multiplier = multiplier / number;
-            ret.push(TimebaseStage { one_based, multiplier });
-        }
-        Ok(Timebase { stages: ret })
-    }
-    fn eval(&self, mut specifier: &str, be_one_based: bool) -> Result<PosFloat, String> {
-        // TODO: it's more numerically stable if we sum from smallest to
-        // largest... but if your Segment is long enough for that to matter
-        // you should rethink your life choices
-        let mut ret = PosFloat::ZERO;
-        for (i, stage) in self.stages.iter().enumerate() {
-            let last = i+1 == self.stages.len();
-            let raw = if last {
-                // Parse the rest of the specifier as a f32
-                match specifier.parse::<PosFloat>() {
-                    Ok(x) => x,
-                    Err(_) => {
-                        return Err(format!("Invalid timecode"))
-                    },
-                }
-            }
-            else {
-                // Parse up to the next `.` as an i32
-                let period_pos = specifier.find('.').unwrap_or(specifier.len());
-                let interesting = &specifier[..period_pos];
-                specifier = &specifier[(period_pos+1).min(specifier.len())..];
-                match interesting.parse::<i32>() {
-                    Ok(x) => PosFloat::new(x as f32)?,
-                    Err(_) => {
-                        return Err(format!("Invalid timecode"))
-                    },
-                }
-            };
-            if be_one_based && stage.one_based {
-                raw.saturating_sub(PosFloat::ONE);
-            }
-            ret = ret + raw * stage.multiplier;
-        }
-        Ok(ret)
-    }
-}
-
-struct TimebaseCollection<'a> {
-    parent: Option<&'a TimebaseCollection<'a>>,
-    timebases: HashMap<String, Timebase>,
-    active_timebase: Option<String>,
-}
-
-impl<'a> TimebaseCollection<'a> {
-    fn new() -> TimebaseCollection<'static> {
-        TimebaseCollection {
-            parent: None,
-            timebases: HashMap::new(),
-            active_timebase: None,
-        }
-    }
-    fn make_child(&self) -> TimebaseCollection<'_> {
-        TimebaseCollection {
-            parent: Some(self),
-            timebases: HashMap::new(),
-            active_timebase: self.active_timebase.clone(),
-        }
-    }
-    fn get_timebase(&self, name: &str) -> Option<&Timebase> {
-        self.timebases.get(name)
-        .or_else(|| {
-            if let Some(parent) = self.parent { parent.get_timebase(name) }
-            else { None }
-        })
-    }
-    fn get_active_timebase(&self) -> Option<&Timebase> {
-        self.active_timebase.as_ref().and_then(|x| self.get_timebase(x))
-    }
-    fn parse_timebase_node(&mut self, node: &DinNode) -> Result<(), String> {
-        match || -> Result<(), String> {
-            assert_eq!(node.items[0], "timebase");
-            if !node.children.is_empty() {
-                return Err("timebase elements must have no children (check indentation)".to_string())
-            }
-            if node.items.len() < 2 {
-                return Err("not enough items in timebase spec".to_string())
-            }
-            let (name, stages) = if node.items[1].starts_with(|x: char| x == '.' || x == '@' || x.is_ascii_digit()) {
-                // Doesn't look like a timebase name. Parse the whole thing.
-                ("default".to_owned(), &node.items[1..])
-            }
-            else {
-                // Looks like the first thing is the timebase name.
-                (node.items[1].clone(), &node.items[2..])
-            };
-            if stages.is_empty() {
-                if self.get_timebase(&name).is_none() {
-                    return Err(format!("can't set timebase {:?} as active because it doesn't exist", name))
-                }
-                self.active_timebase = Some(name);
-            }
-            else {
-                let timebase = Timebase::parse_source(stages)?;
-                self.timebases.insert(name.clone(), timebase);
-                if self.active_timebase.is_none() {
-                    self.active_timebase = Some(name);
-                }
-            }
-            Ok(())
-        }() {
-            Err(x) => Err(format!("line {}: {}", node.lineno, x)),
-            x => x,
-        }
-    }
-    fn parse_time(&self, items: &[String]) -> Result<PosFloat, String> {
-        let (timebase, time) = match items.len() {
-            2 => {
-                let timebase = match self.get_active_timebase() {
-                    Some(x) => x,
-                    None => &DEFAULT_TIMEBASE,
-                };
-                (timebase, &items[1])
-            },
-            3 => {
-                let timebase = match self.get_timebase(&items[1]) {
-                    Some(x) => x,
-                    None => {
-                        return Err(format!("no known timebase named {:?}", items[1]))
-                    },
-                };
-                (timebase, &items[2])
-            },
-            _ => return Err("either specify a time in the default timebase, or the name of a timebase followed by a time in that timebase".to_string())
-        };
-        match timebase.eval(time, !(items[0].ends_with("length") || items[0].starts_with("fade") || items[0].starts_with("over"))) {
-            Ok(x) => Ok(x),
-            Err(x) => Err(x),
-        }
-    }
-    fn parse_time_node(&self, node: &DinNode) -> Result<PosFloat, String> {
-        if !node.children.is_empty() {
-            return Err(format!("{} elements must have no children (check indentation)", node.items[0]))
-        }
-        match self.parse_time(&node.items) {
-            Ok(x) => Ok(x),
-            Err(x) => Err(format!("line {}: {}", node.lineno, x)),
-        }
-    }
-}
-
 const SOUND_TIME_KEYWORDS: &[&str] = &[
-    "start", "end", "length",
+    "timebase", "start", "end", "length",
 ];
 
 impl Sound {
-    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection) -> Result<Sound, String> {
-        assert_eq!(node.items[0], "sound");
-        if node.items.len() != 2 {
-            return Err(format!("line {}: sound element must have a name", node.lineno))
-        }
+    /// Parse a `Sound` from a `DinNode`. This `DinNode` might be an "outline
+    /// sound", in which case it will be at the top level and it will have its
+    /// own name, or it might be an "inline sound", in which case it will have
+    /// had a name generated for it. Thus, it does not parse its own items,
+    /// only its children.
+    fn parse_din_node(mut node: DinNode, timebases: &TimebaseCollection, name: CompactString) -> Result<Sound, String> {
         let mut timebases = timebases.make_child();
-        let name = node.items[1].to_compact_string();
         let mut path = None;
-        let mut stream = None;
-        let mut data = HashMap::new();
+        let mut time_data = HashMap::new();
         let mut offset = None;
-        for child in node.children.iter() {
-            if !child.children.is_empty() {
-                return Err(format!("line {}: this element must have no children", child.lineno))
+        let stream = parse_optional_prefixed_child!(node, "stream")?;
+        parse_optional_prefixed_child!(node, "file" path=*)?;
+        if let Some(path) = path.as_ref() {
+            if path.contains('\0') {
+                return Err(format!("line {}: null characters are not allowed in paths", node.lineno))
             }
-            debug_assert!(!child.items.is_empty());
-            if child.items[0] == "stream" {
-                if stream.is_some() {
-                    return Err(format!("line {}: only one {:?} element allowed", child.lineno, child.items[0]))
-                }
-                else if child.items.len() > 1 {
-                    return Err(format!("line {}: \"stream\" must not have any items", child.lineno))
-                }
-                else {
-                    stream = Some(true);
-                }
-            }
-            else if child.items[0] == "file" {
-                if path.is_some() {
-                    return Err(format!("line {}: only one {:?} element allowed", child.lineno, child.items[0]))
-                }
-                else if child.items.len() > 2 {
-                    return Err(format!("line {}: this element should have a single item (try adding quotes)", child.lineno))
-                }
-                else if let Some(index) = child.items[1].find(['\0']) {
-                    return Err(format!("line {}: this element's path contains a null character at position {}", child.lineno, index))
-                }
-                else {
-                    path = Some(child.items[1].to_compact_string());
-                }
-            }
-            else if child.items[0] == "timebase" {
-                timebases.parse_timebase_node(child)?;
-            }
-            else if SOUND_TIME_KEYWORDS.contains(&child.items[0].as_str()) {
-                if data.contains_key(child.items[0].as_str()) {
-                    return Err(format!("line {}: only one {:?} element allowed", child.lineno, child.items[0]))
-                }
-                else {
-                    let time = timebases.parse_time_node(child)?;
-                    data.insert(child.items[0].as_str(), time);
-                }
-            }
-            else if child.items[0] == "offset" {
-                if offset.is_some() {
-                    return Err(format!("line {}: only one {:?} element allowed", child.lineno, child.items[0]))
-                }
-                else if child.items.len() != 2 {
-                    return Err(format!("line {}: this element should have a single item", child.lineno))
-                }
-                else if let Ok(value) = child.items[1].parse() {
-                    offset = Some(PosFloat::new(value)?);
-                }
-                else {
-                    return Err(format!("line {}: that doesn't appear to be a valid number", child.lineno))
-                }
+        }
+        for child in node.consume_designated_children(SOUND_TIME_KEYWORDS) {
+            if child.items[0] == "timebase" {
+                timebases.parse_timebase_node(&child)?;
             }
             else {
-                return Err(format!("line {}: unknown sound element {:?}", child.lineno, child.items[0]))
+                let time = timebases.parse_time_node(&child)?;
+                time_data.insert(child.items[0].clone(), time);
+            }
+        }
+        if let Some(child) = node.consume_optional_prefixed_child("offset")? {
+            if let Some(value) = child.items[1].parse().ok().and_then(|x| PosFloat::new(x).ok()) {
+                offset = Some(value);
+            }
+            else {
+                return Err(format!("line {}: that doesn't appear to be a valid number", child.lineno))
             }
         }
         let offset = offset.unwrap_or(PosFloat::ZERO);
-        let start = match data.get("start") {
+        let start = match time_data.get("start") {
             Some(x) => *x + offset,
             None => PosFloat::ZERO,
         };
-        let end = match (data.get("end"), data.get("length")) {
+        let end = match (time_data.get("end"), time_data.get("length")) {
             (Some(_), Some(_)) => {
                 return Err(format!("line {}: only one of \"end\" and \"
                 length\" may be specified, not both", node.lineno))
@@ -417,17 +68,17 @@ impl Sound {
                 return Err(format!("line {}: one of \"end\" or \"length\" must be specified", node.lineno))
             },
         };
+        node.finish_parsing_children()?;
         // TODO: fade out requires length
         let path = match path {
-            Some(path) => path,
+            Some(path) => path.to_compact_string(),
             None => {
                 if let Some(index) = name.find(['\0']) {
                     return Err(format!("Sound {name:?} has a null character in its name at position {index} and no explicit path. If there is no explicit path, the name is used as the path, and the path is not allowed to have null characters in it. Either remove the null character from the name or add an explicit path."));
                 }
-                name.to_compact_string()
+                name.clone()
             }
         };
-        let stream = stream.unwrap_or(false);
         Ok(Sound {
             name, path, start, end, stream,
         })
@@ -435,43 +86,28 @@ impl Sound {
 }
 
 impl Sequence {
-    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection) -> Result<Sequence, String> {
-        assert_eq!(node.items[0], "sequence");
-        if node.items.len() != 2 {
-            return Err(format!("line {}: sequence element must have a name", node.lineno))
-        }
+    /// Parse a `Sequence` from a `DinNode`. This `DinNode` might be an
+    /// "outline sequence", in which case it will be at the top level and it
+    /// will have its own name, or it might be an "inline sequence", in which
+    /// case it will have had a name generated for it. Thus, it does not parse
+    /// its own items, only its children.
+    fn parse_din_node(mut node: DinNode, timebases: &TimebaseCollection, name: CompactString) -> Result<Sequence, String> {
         let mut timebases = timebases.make_child();
-        let name = node.items[1].to_compact_string();
-        let mut length = None;
+        let length = node.consume_required_prefixed_child("length").and_then(|child| timebases.parse_time_node(&child))?;
         let mut elements = Vec::new();
-        for child in node.children.iter() {
-            debug_assert!(!child.items.is_empty());
-            if child.items[0] == "length" {
-                if !child.children.is_empty() {
-                    return Err(format!("line {}: this element must have no children", child.lineno))
+        for child in node.consume_designated_children(&["play","timebase"]) {
+            match child.items[0].as_str() {
+                "play" =>  {
+                    let (start, element) = SequenceElement::parse_din_node(child, &timebases, &name)?;
+                    elements.push((start, element));
                 }
-                else if length.is_some() {
-                    return Err(format!("line {}: only one {:?} element allowed", child.lineno, child.items[0]))
+                "timebase" => {
+                    timebases.parse_timebase_node(&child)?;
                 }
-                else {
-                    length = Some(timebases.parse_time_node(child)?);
-                }
-            }
-            else if child.items[0] == "play" {
-                let (start, element) = SequenceElement::parse_din_node(child, &timebases)?;
-                elements.push((start, element));
-            }
-            else if child.items[0] == "timebase" {
-                timebases.parse_timebase_node(child)?;
-            }
-            else {
-                return Err(format!("line {}: unknown sequence element {:?}", child.lineno, child.items[0]))
+                _ => unreachable!()
             }
         }
-        let length = match length {
-            Some(x) => x,
-            None => return Err(format!("line {}: \"length\" must be specified", node.lineno))
-        };
+        node.finish_parsing_children()?;
         elements.sort_by(|a,b| a.0.cmp(&b.0));
         Ok(Sequence {
             name, length, elements,
@@ -480,81 +116,57 @@ impl Sequence {
 }
 
 const SOUND_ELEMENT_TIME_KEYWORDS: &[&str] = &[
-    "at", "for", "until", "fade_in", "fade_out",
+    "timebase", "at", "for", "until", "fade_in", "fade_out",
 ];
 
 const SEQUENCE_ELEMENT_TIME_KEYWORDS: &[&str] = &[
-    "at"
+    "timebase", "at"
 ];
 
 impl SequenceElement {
-    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection) -> Result<(PosFloat, SequenceElement), String> {
-        assert_eq!(node.items[0], "play");
-        // TODO: Better (combinatorial?) error messages.
-        if node.items.len() == 1 {
-            return Err(format!("line {}: \"play\" must specify an element type of either \"sound\" or \"sequence\" and the name of an element of the specified type.", node.lineno))
-        }
-        let element_type = match node.items[1].as_str() {
-            e @ "sound" | e @ "sequence" => e,
-            x => return Err(format!("line {}: invalid element type \"{x}\". Element type must be either \"sound\" or \"sequence\".", node.lineno))
+    fn parse_din_node(mut node: DinNode, timebases: &TimebaseCollection, sequence_name: &str) -> Result<(PosFloat, SequenceElement), String> {
+        let mut element_type = None;
+        let mut name = None;
+        parse_din_node!(node, "play" element_type=("sound"|"sequence") [name=*])?;
+        let element_type = element_type.unwrap();
+        let time_keywords = match element_type.as_str() {
+            "sound" => SOUND_ELEMENT_TIME_KEYWORDS,
+            "sequence" => SEQUENCE_ELEMENT_TIME_KEYWORDS,
+            _ => unreachable!(),
         };
-        if node.items.len() < 3 {
-            return Err(format!("line {}: \"play\" must specify the name of the element to be played", node.lineno))
-        }
-        let name = &node.items[2];
-        if node.items.len() > 3 {
-            return Err(format!("line {}: \"play\" must only include the element type and the name of the element on its own line.", node.lineno))
-        }
         let mut timebases = timebases.make_child();
-        // TODO: remove explicit type
         let mut data = HashMap::new();
         let mut channel = None;
-        for child in node.children.iter() {
-            if !child.children.is_empty() {
-                return Err(format!("line {}: this element must have no children", child.lineno))
+        if element_type == "sound" {
+            parse_optional_prefixed_child!(node, "channel" channel=*)?;
+        }
+        for child in node.consume_designated_children(time_keywords) {
+            if child.items[0] == "timebase" {
+                timebases.parse_timebase_node(&child)?;
             }
-            debug_assert!(!child.items.is_empty());
-            if child.items[0] == "channel" {
-                if element_type == "sequence" {
-                    return Err(format!("line {}: \"channel\" is not allowed in a sequence element", child.lineno))
-                }
-                if channel.is_some() {
-                    return Err(format!("line {}: only one {:?} parameter allowed", child.lineno, child.items[0]))
-                }
-                else if child.items.len() == 1 {
-                    return Err(format!("line {}: \"channel\" must specify the name of a channel that will control this region", child.lineno))
-                }
-                else if child.items.len() > 2 {
-                    return Err(format!("line {}: \"channel\" must have only one item (do you need quotes?)", child.lineno))
-                }
-                else {
-                    channel = Some(child.items[1].clone());
-                }
-            }
-            else if child.items[0] == "timebase" {
-                timebases.parse_timebase_node(child)?;
-            }
-            else if match element_type {
-                "sequence" => SEQUENCE_ELEMENT_TIME_KEYWORDS.contains(&child.items[0].as_str()),
-                "sound" => SOUND_ELEMENT_TIME_KEYWORDS.contains(&child.items[0].as_str()),
-                _ => unreachable!()
-            } {
-                if data.contains_key(child.items[0].as_str()) {
-                    return Err(format!("line {}: only one {:?} parameter allowed", child.lineno, child.items[0]))
-                }
-                else {
-                    let time = timebases.parse_time_node(child)?;
-                    data.insert(child.items[0].as_str(), time);
-                }
+            else if data.contains_key(child.items[0].as_str()) {
+                return Err(format!("line {}: only one {:?} parameter allowed", child.lineno, child.items[0]))
             }
             else {
-                return Err(format!("line {}: unknown element parameter {:?}", child.lineno, child.items[0]))
+                let time = timebases.parse_time_node(&child)?;
+                data.insert(child.items[0].clone(), time);
             }
         }
-        let channel = match channel {
-            Some(x) => x.to_compact_string(),
-            None => "main".to_compact_string(),
+        let anonymous;
+        let name = match name {
+            None => {
+                anonymous = true;
+                format!("{sequence_name}[{}]", node.lineno).to_compact_string()
+            },
+            Some(x) => {
+                anonymous = false;
+                x.to_compact_string()
+            },
         };
+        if anonymous != node.children.is_empty() {
+            return Err(format!("line {}: \"play\" must either specify the name of the {element_type} to be played, or provide an inline definition for it (not both nor neither!)", node.lineno))
+        }
+        let channel = channel.as_ref().map(CompactString::as_str).unwrap_or("main").to_compact_string();
         let start = match data.get("at") {
             Some(x) => *x,
             None => PosFloat::ZERO,
@@ -581,7 +193,8 @@ impl SequenceElement {
             Some(fade_out) => (length.map(|x| x.saturating_sub(*fade_out)), *fade_out),
             None => (length, PosFloat::ZERO),
         };
-        match element_type {
+        node.finish_parsing_children()?;
+        match element_type.as_str() {
             "sound" => Ok((start, SequenceElement::PlaySound { sound: name.to_compact_string(), channel, fade_in, length, fade_out })),
             "sequence" => Ok((start, SequenceElement::PlaySequence { sequence: name.to_compact_string() })),
             _ => unreachable!()
@@ -707,18 +320,18 @@ fn parse_flow_command_tokens(tokens: &[String], timebases: &TimebaseCollection) 
     }
 }
 
-fn parse_node_child_code(node: &DinNode, timebases: &TimebaseCollection) -> Result<Vec<Command>, String> {
+fn parse_node_child_code(node: &mut DinNode, timebases: &TimebaseCollection) -> Result<Vec<Command>, String> {
     let mut timebases = timebases.make_child();
     let mut commands = vec![];
-    for child in node.children.iter() {
+    for mut child in node.consume_children() {
         debug_assert!(!child.items.is_empty());
         if child.items[0] == "timebase" {
-            timebases.parse_timebase_node(child)?;
+            timebases.parse_timebase_node(&child)?;
         }
         else if child.items[0] == "node" {
             return Err(format!("line {}: nodes cannot be nested", child.lineno))
         }
-        else if let Some(command) = parse_flow_command_node(child, &timebases, commands.last_mut())? {
+        else if let Some(command) = parse_flow_command_node(&mut child, &timebases, commands.last_mut())? {
             if let Some(command) = command {
                 // it was a command to add
                 commands.push(command);
@@ -734,7 +347,7 @@ fn parse_node_child_code(node: &DinNode, timebases: &TimebaseCollection) -> Resu
     Ok(commands)
 }
 
-fn parse_if_body(node: &DinNode, rest: &[String], timebases: &TimebaseCollection) -> Result<Vec<Command>, String> {
+fn parse_if_body(node: &mut DinNode, rest: &[String], timebases: &TimebaseCollection) -> Result<Vec<Command>, String> {
     if !rest.is_empty() {
         if !node.children.is_empty() {
             return Err(format!("{} can have an inline body (right after the \"then\") or children (indented lines afterward) but not both", node.items[0]))
@@ -759,10 +372,12 @@ fn parse_if_body(node: &DinNode, rest: &[String], timebases: &TimebaseCollection
 /// - `Ok(Some(None))`: `else` or `else if` that successfully got folded into
 ///   a preceding `If`
 /// - `Ok(Some(Some(command)))`: A command you must now append to the list
-fn parse_flow_command_node(node: &DinNode, timebases: &TimebaseCollection, last_command: Option<&mut Command>) -> Result<Option<Option<Command>>, String> {
+fn parse_flow_command_node(node: &mut DinNode, timebases: &TimebaseCollection, last_command: Option<&mut Command>) -> Result<Option<Option<Command>>, String> {
     if node.items[0] == "if" {
         // If we get here, we might either be an inline if or an expanded one.
-        let (condition, rest) = parse_condition(&node.items[1..])?;
+        let mut items = vec![];
+        std::mem::swap(&mut items, &mut node.items);
+        let (condition, rest) = parse_condition(&items[1..])?;
         let commands = parse_if_body(node, rest, timebases)?;
         Ok(Some(Some(Command::If {
             branches: vec![
@@ -779,7 +394,9 @@ fn parse_flow_command_node(node: &DinNode, timebases: &TimebaseCollection, last_
         };
         if node.items.get(1).map(String::as_str) == Some("if") {
             // We are an else if
-            let (condition, rest) = parse_condition(&node.items[2..])?;
+            let mut items = vec![];
+            std::mem::swap(&mut items, &mut node.items);
+            let (condition, rest) = parse_condition(&items[2..])?;
             let commands = parse_if_body(node, rest, timebases)?;
             last_branches.push((condition, commands));
         }
@@ -803,7 +420,9 @@ fn parse_flow_command_node(node: &DinNode, timebases: &TimebaseCollection, last_
                 return Err(format!("line {}: \"elseif\" without matching \"if\" (check indentation)", node.lineno))
             },
         };
-        let (condition, rest) = parse_condition(&node.items[1..])?;
+        let mut items = vec![];
+        std::mem::swap(&mut items, &mut node.items);
+        let (condition, rest) = parse_condition(&items[1..])?;
         let commands = parse_if_body(node, rest, timebases)?;
         last_branches.push((condition, commands));
         Ok(Some(None))
@@ -824,38 +443,37 @@ fn parse_flow_command_node(node: &DinNode, timebases: &TimebaseCollection, last_
 }
 
 impl Node {
-    fn parse_node(din_node: &DinNode, timebases: &TimebaseCollection) -> Result<Node, String> {
+    fn parse_node(mut din_node: DinNode, timebases: &TimebaseCollection) -> Result<Node, String> {
         assert_eq!(din_node.items[0], "node");
         if din_node.items.len() != 2 {
             return Err(format!("line {}: node element must have a name", din_node.lineno))
         }
         let name = din_node.items[1].to_compact_string();
-        let commands = parse_node_child_code(din_node, timebases)?;
+        let commands = parse_node_child_code(&mut din_node, timebases)?;
+        din_node.finish_parsing_children()?;
         Ok(Node { name: Some(name), commands })
     }
 }
 
 impl Flow {
-    fn parse_din_node(node: &DinNode, timebases: &TimebaseCollection, flows: &HashMap<CompactString, Arc<Flow>>) -> Result<Flow, String> {
-        assert_eq!(node.items[0], "flow");
-        if node.items.len() != 2 {
-            return Err(format!("line {}: flow element must have a name", node.lineno))
-        }
+    fn parse_din_node(mut node: DinNode, timebases: &TimebaseCollection, flows: &HashMap<CompactString, Arc<Flow>>) -> Result<Flow, String> {
+        let mut name = None;
+        parse_din_node!(node, "flow" name=*)?;
+        let name = name.unwrap().to_compact_string();
         let mut timebases = timebases.make_child();
-        let name = node.items[1].to_compact_string();
         let mut nodes = flows.get(&name).map(|x| x.nodes.clone()).unwrap_or_else(|| { HashMap::new() });
         let mut start_node = Node::new();
-        for child in node.children.iter() {
+        for mut child in node.consume_children() {
             debug_assert!(!child.items.is_empty());
             if child.items[0] == "timebase" {
-                timebases.parse_timebase_node(child)?;
+                timebases.parse_timebase_node(&child)?;
             }
             else if child.items[0] == "node" {
                 let mut node = Node::parse_node(child, &timebases)?;
                 Command::flatten_commands(&mut node.commands);
                 nodes.insert(node.name.clone().unwrap(), Arc::new(node));
             }
-            else if let Some(command) = parse_flow_command_node(child, &timebases, start_node.commands.last_mut())? {
+            else if let Some(command) = parse_flow_command_node(&mut child, &timebases, start_node.commands.last_mut())? {
                 if let Some(command) = command {
                     // it was a command to add
                     start_node.commands.push(command);
@@ -887,15 +505,23 @@ impl Soundtrack {
             match node.items[0].as_str() {
                 "timebase" => timebases.parse_timebase_node(&node)?,
                 "sound" => {
-                    let sound = Sound::parse_din_node(&node, &timebases)?;
-                    self.sounds.insert(sound.name.clone(), Arc::new(sound));
+                    let mut name = None;
+                    parse_din_node!(node, "sound" name=*)?;
+                    let name = name.unwrap().to_compact_string();
+                    let sound = Sound::parse_din_node(node, &timebases, name.clone())?;
+                    debug_assert_eq!(sound.name, name);
+                    self.sounds.insert(name, Arc::new(sound));
                 },
                 "sequence" => {
-                    let sequence = Sequence::parse_din_node(&node, &timebases)?;
-                    self.sequences.insert(sequence.name.clone(), Arc::new(sequence));
+                    let mut name = None;
+                    parse_din_node!(node, "sequence" name=*)?;
+                    let name = name.unwrap().to_compact_string();
+                    let sequence = Sequence::parse_din_node(node, &timebases, name.clone())?;
+                    debug_assert_eq!(sequence.name, name);
+                    self.sequences.insert(name, Arc::new(sequence));
                 },
                 "flow" => {
-                    let flow = Flow::parse_din_node(&node, &timebases, &self.flows)?;
+                    let flow = Flow::parse_din_node(node, &timebases, &self.flows)?;
                     self.flows.insert(flow.name.clone(), Arc::new(flow));
                 },
                 "region" => return Err(format!("line {}: regions may only exist inside sequences (check indentation)", node.lineno)),
