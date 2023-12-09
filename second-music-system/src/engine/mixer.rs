@@ -179,6 +179,7 @@ impl<ID: Debug> Mixer<ID> {
                 // Need to mix a little bit more
                 out = &mut out[len..];
                 accum_len += len;
+                volume_getter.step_faders_by((len / samples_per_frame).into());
                 continue;
             } else {
                 debug_assert_eq!(len, out.len());
@@ -208,7 +209,6 @@ impl<ID: Debug> Mixer<ID> {
             )
         });
         let out_frames = out.len() / self.samples_per_frame;
-        volume_getter.step_faders_by(out_frames.into());
         self.next_output_sample_frame_number = self
             .next_output_sample_frame_number
             .wrapping_add(out_frames as u64);
