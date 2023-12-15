@@ -81,8 +81,10 @@ fn sound_with_null_name_explicit_nonnull_path_parse() {
 fn new_sequence_parse() {
     let node = node!(1, ["sequence", "test1"], [node!(2, ["length", "32"]),]);
     let timebases = TimebaseCollection::new();
+    let mut soundtrack = Soundtrack::new();
     assert_eq!(
         Sequence::parse_din_node(
+            &mut soundtrack,
             node,
             &timebases,
             CompactString::new("test1")
@@ -121,13 +123,16 @@ fn new_sequence_element_parse() {
         ]
     );
     let timebases = TimebaseCollection::new();
+    let mut soundtrack = Soundtrack::new();
     let sequence_one = Sequence::parse_din_node(
+        &mut soundtrack,
         node_one,
         &timebases,
         CompactString::new("test1"),
     )
     .unwrap();
     let sequence_two = Sequence::parse_din_node(
+        &mut soundtrack,
         node_two,
         &timebases,
         CompactString::new("test2"),
@@ -229,7 +234,9 @@ flow test_flow1
     assert_eq!(soundtrack.sounds.len(), 0);
     assert_eq!(soundtrack.sequences.len(), 0);
     assert_eq!(soundtrack.flows.len(), 1);
-    let start_node = Arc::new(Node::new());
+    let mut node = Node::new();
+    node.commands.push(Command::Done);
+    let start_node = Arc::new(node);
     let nodes = HashMap::new();
     assert_eq!(
         **soundtrack.flows.get("test_flow1").unwrap(),
@@ -237,6 +244,7 @@ flow test_flow1
             name: "test_flow1".to_compact_string(),
             start_node,
             nodes,
+            autoloop: false,
         }
     );
 }
@@ -271,15 +279,19 @@ flow test_flow1
     assert_eq!(soundtrack.sounds.len(), 0);
     assert_eq!(soundtrack.sequences.len(), 1);
     assert_eq!(soundtrack.flows.len(), 1);
-    let start_node = Arc::new(Node::new());
+    let start_node = Arc::new(Node {
+        name: None,
+        commands: vec![Command::Done],
+    });
     let mut nodes = HashMap::new();
     nodes.insert(
         "test_node1".to_compact_string(),
         Arc::new(Node {
             name: Some("test_node1".to_compact_string()),
-            commands: vec![Command::PlaySequence(
-                "test_sequence1".to_compact_string(),
-            )],
+            commands: vec![
+                Command::PlaySequence("test_sequence1".to_compact_string()),
+                Command::Done,
+            ],
         }),
     );
     assert_eq!(
@@ -288,11 +300,13 @@ flow test_flow1
             name: "test_flow1".to_compact_string(),
             start_node,
             nodes,
+            autoloop: false,
         }
     );
 }
 #[test]
 fn fade_out_parse() {
+    let mut soundtrack = Soundtrack::new();
     let node = node!(
         1,
         ["sequence", "test1"],
@@ -312,6 +326,7 @@ fn fade_out_parse() {
     let timebases = TimebaseCollection::new();
     assert_eq!(
         Sequence::parse_din_node(
+            &mut soundtrack,
             node,
             &timebases,
             CompactString::new("test1")
@@ -451,12 +466,18 @@ fn expression_parsing() {
 #[test]
 #[should_panic]
 fn anonymous_sound_with_no_path_parse() {
+    let mut soundtrack = Soundtrack::new();
     let node = node!(
         1,
         ["sequence", "test"],
         [node!(2, ["play", "sound"], [node!(3, ["length", "0"])])]
     );
     let timebases = TimebaseCollection::new();
-    Sequence::parse_din_node(node, &timebases, CompactString::new("test"))
-        .unwrap();
+    Sequence::parse_din_node(
+        &mut soundtrack,
+        node,
+        &timebases,
+        CompactString::new("test"),
+    )
+    .unwrap();
 }

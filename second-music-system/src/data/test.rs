@@ -89,6 +89,7 @@ fn simple_flatten_if() {
         /*5*/ Command::StartNode("defeat".to_compact_string()),
         /*6*/ Command::Goto(vec![], true, 8),
         /*7*/ Command::StartNode("drumroll".to_compact_string()),
+        /*x*/ Command::Done,
     ];
     if commands != correct {
         show_command_diff(&correct, &commands);
@@ -198,6 +199,7 @@ fn complex_flatten_if() {
         /*7*/ Command::Goto(vec![], true, 8),
         /*8*/ Command::Goto(vec![], true, 10),
         /*9*/ Command::StartNode("drumroll".to_compact_string()),
+        /*x*/ Command::Done,
     ];
     if commands != correct {
         show_command_diff(&correct, &commands);

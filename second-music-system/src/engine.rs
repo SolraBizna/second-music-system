@@ -837,7 +837,6 @@ pub struct Engine {
     flow_controls: HashMap<CompactString, StringOrNumber>,
     mix_controls: HashMap<CompactString, Fader>,
     flow_volumes: HashMap<CompactString, Fader>,
-    node_volumes: HashMap<StringAndAHalf, Fader>,
     /// Set of flows that are waiting to start.
     starting_flows: HashSet<CompactString>,
     /// Set of flows that are fading out. Flows are added to this list
@@ -863,11 +862,9 @@ impl EngineCommands for Engine {}
 struct VolumeGetWrapper<'a, 'b> {
     mix_controls: &'a mut HashMap<CompactString, Fader>,
     flow_volumes: &'a mut HashMap<CompactString, Fader>,
-    node_volumes: &'a mut HashMap<StringAndAHalf, Fader>,
     flows_fading_out: &'a HashSet<CompactString>,
     starting_flows: &'a HashSet<CompactString>,
     seen_flows: &'b mut HashSet<CompactString>,
-    seen_nodes: &'b mut HashSet<StringAndAHalf>,
 }
 
 /// A Node from a Flow, queued to execute.
@@ -1050,7 +1047,6 @@ impl Engine {
             .into_iter()
             .collect(),
             flow_volumes: HashMap::new(),
-            node_volumes: HashMap::new(),
             active_flow_nodes: vec![],
             queued_sounds: BinaryHeap::new(),
             mix_buf: vec![],
@@ -1129,6 +1125,8 @@ impl Engine {
                 HashSet::with_capacity(16);
             let mut nodes_to_restart: HashSet<StringAndAHalf> =
                 HashSet::with_capacity(16);
+            let mut possible_autoloop_flows: Vec<Arc<Flow>> =
+                Vec::with_capacity(16);
             let flow_controls = &mut self.flow_controls;
             self.active_flow_nodes.retain_mut(|active_node| {
                 if active_node.next_instruction_time > now { return true }
@@ -1138,6 +1136,12 @@ impl Engine {
                     n += 1;
                     match next_command {
                         Command::Done => {
+                            match self.live_soundtrack.flows.get(&active_node.flow_name) {
+                                Some(flow) if flow.autoloop && !possible_autoloop_flows.contains(flow) => {
+                                    possible_autoloop_flows.push(flow.clone());
+                                }
+                                _ => (),
+                            }
                             return false;
                         },
                         Command::Wait(sleep_time) => {
@@ -1169,15 +1173,6 @@ impl Engine {
                         Command::RestartFlow => {
                             nodes_to_restart.insert(StringAndAHalf(active_node.flow_name.clone(), None));
                         },
-                        Command::FadeNodeOut(node_name, fade_length) => {
-                            match self.node_volumes.get_mut(&StringAndAHalf(active_node.flow_name.clone(), Some(node_name.clone()))) {
-                                Some(fader) => {
-                                    let old_volume = fader.evaluate();
-                                    *fader = Fader::start(FadeType::Linear, old_volume, PosFloat::ONE, fade_length.seconds_to_frac_frames(self.sample_rate));
-                                },
-                                None => self.sound_delegate.warning(&format!("missing node: {:?}::{:?}", active_node.flow_name, node_name))
-                            }
-                        },
                         Command::Set(control_name, ops) => {
                             flow_controls.insert(control_name.clone(), evaluate(flow_controls, ops));
                         },
@@ -1194,19 +1189,22 @@ impl Engine {
                 active_node.next_instruction_index = n;
                 active_node.next_instruction_index < active_node.node.commands.len()
             });
+            for flow in possible_autoloop_flows.into_iter() {
+                debug_assert!(flow.autoloop);
+                if !self
+                    .active_flow_nodes
+                    .iter()
+                    .any(|active_node| flow.name == active_node.flow_name)
+                {
+                    nodes_to_start
+                        .insert(StringAndAHalf(flow.name.clone(), None));
+                }
+            }
             for StringAndAHalf(flow_name, node_name) in
                 nodes_to_start.into_iter()
             {
-                let node_name = node_name.expect("SMS internal bug: a node with no name was put into nodes_to_start, which should not be possible");
-                // Unwrapping this then wrapping it back in a Some feels wrong,
-                // but it avoids iteration if node_name is `None`. Of course,
-                // since it panics, does it really matter if we do a few
-                // iterations before crashing? I don't know, but you know:
-                // premature optimization and all that. Probably need to
-                // re-evaluate this later. -n
                 match self.active_flow_nodes.iter_mut().find(|x| {
-                    x.flow_name == flow_name
-                        && x.node.name == Some(node_name.clone())
+                    x.flow_name == flow_name && x.node.name == node_name
                 }) {
                     Some(_active_flow_node) => {
                         // Node is already playing. Do nothing.
@@ -1227,15 +1225,19 @@ impl Engine {
                                 }
                                 Some(flow) => flow,
                             };
-                        let node = match flow.nodes.get(&node_name) {
-                            None => {
-                                self.sound_delegate.warning(&format!(
-                                    "can't start missing node: {:?}::{:?}",
-                                    flow_name, node_name
-                                ));
-                                continue;
-                            }
-                            Some(node) => node.clone(),
+                        let node = match node_name.as_ref() {
+                            Some(node_name) => match flow.nodes.get(node_name)
+                            {
+                                None => {
+                                    self.sound_delegate.warning(&format!(
+                                        "can't start missing node: {:?}::{:?}",
+                                        flow_name, node_name
+                                    ));
+                                    continue;
+                                }
+                                Some(node) => node.clone(),
+                            },
+                            None => flow.start_node.clone(),
                         };
                         self.active_flow_nodes.push(ActiveNode {
                             flow_name,
@@ -1314,6 +1316,9 @@ impl Engine {
                     self.mixer.play(adapter, queued_sound.who);
                 }
             }
+            // Note: This might be zero, in which case, we will loop around
+            // again and maybe process more nodes. This will happen almost
+            // every time we start a node.
             let max_wait = self.get_num_sample_frames_until_next_exec();
             let buf_len = max_wait
                 .map(|x| {
@@ -1333,11 +1338,9 @@ impl Engine {
                     VolumeGetWrapper {
                         mix_controls: &mut self.mix_controls,
                         flow_volumes: &mut self.flow_volumes,
-                        node_volumes: &mut self.node_volumes,
                         flows_fading_out: &self.flows_fading_out,
                         starting_flows: &self.starting_flows,
                         seen_flows: &mut seen_flows,
-                        seen_nodes: &mut seen_nodes,
                     },
                 );
                 out = &mut out[buf_len..];
@@ -1386,11 +1389,9 @@ impl Engine {
         self.mixer.bump(VolumeGetWrapper {
             mix_controls: &mut self.mix_controls,
             flow_volumes: &mut self.flow_volumes,
-            node_volumes: &mut self.node_volumes,
             flows_fading_out: &self.flows_fading_out,
             starting_flows: &self.starting_flows,
             seen_flows: &mut seen_flows,
-            seen_nodes: &mut seen_nodes,
         });
         self.kill_the_unseen(seen_flows, seen_nodes);
     }
@@ -1402,6 +1403,10 @@ impl Engine {
         seen_nodes: HashSet<StringAndAHalf>,
     ) {
         self.flow_volumes.retain(|k, _| {
+            // We will stay alive if any of the below are true:
+            // - any samples were mixed from this flow
+            // - this flow is not fading out
+            // - this flow is still being started
             if seen_flows.contains(k)
                 || !self.flows_fading_out.contains(k)
                 || self.starting_flows.contains(k)
@@ -1414,19 +1419,10 @@ impl Engine {
                     &self.live_soundtrack,
                     self.soundman.as_mut(),
                 );
-                self.node_volumes.retain(|node_id, _| node_id.0 != k);
                 self.active_flow_nodes.retain(|afn| afn.flow_name != k);
                 self.flows_fading_out.retain(|flow_name| flow_name != k);
                 false
             }
-        });
-        self.node_volumes.retain(|k, _| {
-            seen_nodes.contains(k)
-                || self.starting_flows.contains(&k.0)
-                || self.active_flow_nodes.iter().any(|afn| {
-                    afn.flow_name == k.0
-                        && afn.node.name.as_ref() == k.1.as_ref()
-                })
         });
         self.mix_controls.retain(|k, fader| {
             fader.evaluate() != PosFloat::ONE
@@ -1596,9 +1592,6 @@ impl VolumeGetter<PlayingSoundID> for VolumeGetWrapper<'_, '_> {
                 fader.step_by(n);
             }
         }
-        for fader in self.node_volumes.values_mut() {
-            fader.step_by(n);
-        }
         for fader in self.mix_controls.values_mut() {
             fader.step_by(n);
         }
@@ -1619,28 +1612,16 @@ impl VolumeGetter<PlayingSoundID> for VolumeGetWrapper<'_, '_> {
         {
             return None;
         }
-        let node_fader =
-            match self.node_volumes.get_mut(&id.flow_and_node_name) {
-                None => return None,
-                Some(x) => x,
-            };
-        let node_volume = node_fader.evaluate();
-        // Nodes cannot reach zero volume unless they are being faded out.
-        if node_volume == PosFloat::ZERO {
-            return None;
-        }
         let channel_fader = self.mix_controls.get_mut(&id.channel);
         let channel_volume = channel_fader
             .as_ref()
             .map(|x| x.evaluate())
             .unwrap_or(PosFloat::ZERO);
-        Some(flow_volume * node_volume * channel_volume)
+        Some(flow_volume * channel_volume)
     }
     fn is_varying(&mut self, id: &PlayingSoundID) -> Option<bool> {
         // stop if the flow has stopped
         let flow_fader = self.flow_volumes.get_mut(id.flow_name())?;
-        // stop if the node has stopped
-        let node_fader = self.node_volumes.get_mut(&id.flow_and_node_name)?;
         // DO NOT stop if the channel is silenced, UNLESS it's also fading
         if flow_fader.complete()
             && flow_fader.evaluate() == PosFloat::ONE
@@ -1651,14 +1632,8 @@ impl VolumeGetter<PlayingSoundID> for VolumeGetWrapper<'_, '_> {
         if !self.seen_flows.contains(id.flow_name()) {
             self.seen_flows.insert(id.flow_name().to_compact_string());
         }
-        if !self.seen_nodes.contains(&id.flow_and_node_name) {
-            self.seen_nodes.insert(StringAndAHalf(
-                id.flow_name().to_compact_string(),
-                id.node_name().map(|x| x.to_compact_string()),
-            ));
-        }
         // TODO: "fader quality" setting
-        Some(!flow_fader.complete() || !node_fader.complete())
+        Some(!flow_fader.complete())
     }
 }
 
@@ -1963,10 +1938,6 @@ impl EngineCommandIssuer for Engine {
                     );
                     // we will check if it's loaded the next time the handle turns
                     self.starting_flows.insert(flow_name.clone());
-                    self.node_volumes.insert(
-                        StringAndAHalf(flow_name.clone(), None),
-                        Fader::new(PosFloat::ONE),
-                    );
                     self.flow_volumes.insert(
                         flow_name,
                         Fader::start(
@@ -2092,8 +2063,6 @@ impl EngineCommandIssuer for Engine {
                 if self.starting_flows.remove(&flow_name) {
                     debug_assert!(self.flow_volumes.contains_key(&flow_name));
                 }
-                self.node_volumes
-                    .retain(|node_id, _| node_id.0 != flow_name);
                 if self.flow_volumes.contains_key(&flow_name) {
                     self.flow_volumes.remove(&flow_name);
                     self.flows_fading_out.insert(flow_name);
@@ -2103,9 +2072,6 @@ impl EngineCommandIssuer for Engine {
             KillPrefixedFlows { flow_prefix } => {
                 self.starting_flows.retain(|flow_name| {
                     !flow_name.starts_with(&flow_prefix[..])
-                });
-                self.node_volumes.retain(|node_id, _| {
-                    !node_id.0.starts_with(&flow_prefix[..])
                 });
                 self.flow_volumes.retain(|flow_name, _| {
                     if !flow_name.starts_with(&flow_prefix[..]) {
@@ -2120,7 +2086,6 @@ impl EngineCommandIssuer for Engine {
             }
             KillAllFlows {} => {
                 self.starting_flows.clear();
-                self.node_volumes.clear();
                 self.flow_volumes.retain(|flow_name, _| {
                     self.flows_fading_out
                         .insert(flow_name.to_compact_string());
@@ -2162,11 +2127,9 @@ impl EngineCommandIssuer for Engine {
                     .report_volumes(VolumeGetWrapper {
                         mix_controls: &mut self.mix_controls,
                         flow_volumes: &mut self.flow_volumes,
-                        node_volumes: &mut self.node_volumes,
                         flows_fading_out: &self.flows_fading_out,
                         starting_flows: &self.starting_flows,
                         seen_flows: &mut HashSet::new(),
-                        seen_nodes: &mut HashSet::new(),
                     })
                     .map(|(x, y)| MixFlowReport {
                         flow: x.flow_name().into(),

@@ -183,6 +183,7 @@ impl<ID: Debug> Mixer<ID> {
                 continue;
             } else {
                 debug_assert_eq!(len, out.len());
+                volume_getter.step_faders_by((len / samples_per_frame).into());
                 // All done for now
                 return true;
             }

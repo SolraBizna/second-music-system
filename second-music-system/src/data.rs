@@ -209,8 +209,6 @@ pub(crate) enum Command {
     RestartNode(CompactString),
     /// As `RestartNode(the starting node)`
     RestartFlow,
-    /// Cause another Node to fade out and go away (iff already playing)
-    FadeNodeOut(CompactString, PosFloat),
     /// Change a FlowControl to a new value.
     Set(CompactString, Vec<PredicateOp>),
     /// If/else chain. **INTERMEDIATE PARSING STEP ONLY, MUST NOT OCCUR IN THE
@@ -250,6 +248,7 @@ pub(crate) struct Flow {
     pub(crate) name: CompactString,
     pub(crate) start_node: Arc<Node>,
     pub(crate) nodes: HashMap<CompactString, Arc<Node>>,
+    pub(crate) autoloop: bool,
 }
 
 impl Flow {

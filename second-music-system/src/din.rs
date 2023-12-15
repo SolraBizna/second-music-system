@@ -238,4 +238,11 @@ impl DinNode {
         }
         Ok(())
     }
+    pub fn any_children_left(&self) -> bool {
+        self.children
+            .iter()
+            .filter_map(|x| x.as_ref())
+            .next()
+            .is_some()
+    }
 }

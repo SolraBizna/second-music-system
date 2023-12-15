@@ -112,6 +112,7 @@ impl Sequence {
     /// case it will have had a name generated for it. Thus, it does not parse
     /// its own items, only its children.
     fn parse_din_node(
+        soundtrack: &mut Soundtrack,
         mut node: DinNode,
         timebases: &TimebaseCollection,
         name: CompactString,
@@ -125,7 +126,7 @@ impl Sequence {
             match child.items[0].as_str() {
                 "play" => {
                     let (start, element) = SequenceElement::parse_din_node(
-                        child, &timebases, &name,
+                        soundtrack, child, &timebases, &name,
                     )?;
                     elements.push((start, element));
                 }
@@ -152,10 +153,12 @@ const SEQUENCE_ELEMENT_TIME_KEYWORDS: &[&str] = &["timebase", "at"];
 
 impl SequenceElement {
     fn parse_din_node(
+        soundtrack: &mut Soundtrack,
         mut node: DinNode,
         timebases: &TimebaseCollection,
         sequence_name: &str,
     ) -> Result<(PosFloat, SequenceElement), String> {
+        let lineno = node.lineno;
         let mut element_type = None;
         let mut name = None;
         parse_din_node!(node, "play" element_type=("sound"|"sequence") [name=*])?;
@@ -195,8 +198,31 @@ impl SequenceElement {
                 x.to_compact_string()
             }
         };
-        if anonymous != node.children.is_empty() {
+        if anonymous != node.any_children_left() {
             return Err(format!("line {}: \"play\" must either specify the name of the {element_type} to be played, or provide an inline definition for it (not both nor neither!)", node.lineno));
+        }
+        if anonymous {
+            match element_type.as_str() {
+                "sound" => {
+                    let sound =
+                        Sound::parse_din_node(node, &timebases, name.clone())?;
+                    soundtrack.sounds.insert(name.clone(), Arc::new(sound));
+                }
+                "sequence" => {
+                    let sequence = Sequence::parse_din_node(
+                        soundtrack,
+                        node,
+                        &timebases,
+                        name.clone(),
+                    )?;
+                    soundtrack
+                        .sequences
+                        .insert(name.clone(), Arc::new(sequence));
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            node.finish_parsing_children()?;
         }
         let channel = channel
             .as_ref()
@@ -215,7 +241,7 @@ impl SequenceElement {
             (Some(_), Some(_)) => {
                 return Err(format!(
                     "line {}: only one of \"for\" and \"until\" may be specified, not both",
-                    node.lineno
+                    lineno
                 ))
             }
             (None, None) => None,
@@ -228,35 +254,40 @@ impl SequenceElement {
             }
             None => (length, PosFloat::ZERO),
         };
-        node.finish_parsing_children()?;
         match element_type.as_str() {
             "sound" => Ok((
                 start,
                 SequenceElement::PlaySound {
-                    sound: name.to_compact_string(),
+                    sound: name,
                     channel,
                     fade_in,
                     length,
                     fade_out,
                 },
             )),
-            "sequence" => Ok((
-                start,
-                SequenceElement::PlaySequence {
-                    sequence: name.to_compact_string(),
-                },
-            )),
+            "sequence" => {
+                Ok((start, SequenceElement::PlaySequence { sequence: name }))
+            }
             _ => unreachable!(),
         }
     }
 }
 
 fn parse_flow_command_tokens(
+    soundtrack: &mut Soundtrack,
     tokens: &[String],
     timebases: &TimebaseCollection,
+    din_node: Option<DinNode>,
 ) -> Result<Option<Command>, String> {
     if tokens.is_empty() {
         return Ok(None);
+    }
+    if let Some(din_node) = din_node.as_ref() {
+        // except for "play", we won't be parsing any node here that is allowed
+        // to have children
+        if tokens[0] != "play" && din_node.children.len() > 0 {
+            return Err(format!("TODO: write good error message :thumbsup:"));
+        }
     }
     match tokens[0].as_str() {
         "done" => {
@@ -270,38 +301,74 @@ fn parse_flow_command_tokens(
             Ok(Some(Command::Wait(how_long)))
         }
         "play" => {
-            let token = tokens.get(1).map(String::as_str);
-            match token {
-                Some("sequence") | Some("sound") => (),
-                _ => {
-                    return Err(
-                        "next element after \"play\" must be \"sequence\" or \"sound\"".to_string(),
-                    )
-                }
-            }
-            let target = match tokens.get(2) {
-                Some(x) => x,
-                None => {
-                    return Err(format!(
-                        "next element after \"{}\" must be the name of the {} to play",
-                        token.unwrap(),
-                        token.unwrap()
-                    ))
-                }
-            }
-            .to_compact_string();
-            let and_wait = if tokens.len() == 3 {
-                false
-            } else if tokens.len() == 5 && tokens[3] == "and" && tokens[4] == "wait" {
-                true
-            } else {
-                return Err("the only thing allowed after the name of the sequence or sound to play is the elements \"and wait\" (do you need quotation marks?)".to_string());
+            let element_type = match tokens.get(1).map(String::as_str) {
+                Some("sequence") => "sequence",
+                Some("sound") => "sound",
+                _ => return Err("element after \"play\" must be \"sequence\" or \"sound\"".to_string()),
             };
-            Ok(Some(match (token.unwrap(), and_wait) {
-                ("sequence", false) => Command::PlaySequence(target),
-                ("sequence", true) => Command::PlaySequenceAndWait(target),
-                ("sound", false) => Command::PlaySound(target),
-                ("sound", true) => Command::PlaySoundAndWait(target),
+            let (and_wait, tokens) =
+            if tokens[tokens.len()-2] == "and" && tokens[tokens.len()-1] == "wait" {
+                (true, &tokens[..tokens.len()-2])
+            } else {
+                (false, tokens)
+            };
+            let name = tokens.get(2);
+            if tokens.get(3).is_some() {
+                return Err("too many elements after the name of the {element_type} to play (do you need quotation marks?)".to_string());
+            };
+            let anonymous;
+            let name = match name {
+                None => {
+                    anonymous = true;
+                    match din_node.as_ref() {
+                        Some(x) => format!("[[{}]]", x.lineno).to_compact_string(),
+                        None => "".to_compact_string(), // won't get used
+                    }
+                    // TODO: no! this!
+                    //format!("{flow_name}::{node_name}[{lineno}]", flow_name = todo!(), node_name = todo!(), lineno = todo!()).to_compact_string()
+                }
+                Some(x) => {
+                    anonymous = false;
+                    x.to_compact_string()
+                }
+            };
+            match din_node {
+                Some(din_node) => {
+                    if anonymous {
+                        match element_type {
+                            "sound" => {
+                                let sound =
+                                    Sound::parse_din_node(din_node, &timebases, name.clone())?;
+                                soundtrack.sounds.insert(name.clone(), Arc::new(sound));
+                            }
+                            "sequence" => {
+                                let sequence = Sequence::parse_din_node(
+                                    soundtrack,
+                                    din_node,
+                                    &timebases,
+                                    name.clone(),
+                                )?;
+                                soundtrack
+                                    .sequences
+                                    .insert(name.clone(), Arc::new(sequence));
+                            }
+                            _ => unreachable!(),
+                        }
+                    } else if !din_node.children.is_empty() {
+                        return Err(format!("line {}: \"play\" must either specify the name of the {element_type} to be played, or provide an inline definition for it (not both nor neither!)", din_node.lineno));
+                    }
+                },
+                None => {
+                    if anonymous {
+                        return Err("\"play\" inside an inline \"then\" must specify the name of the {element_type} to be played".to_string());
+                    }
+                }
+            }
+            Ok(Some(match (element_type, and_wait) {
+                ("sequence", false) => Command::PlaySequence(name),
+                ("sequence", true) => Command::PlaySequenceAndWait(name),
+                ("sound", false) => Command::PlaySound(name),
+                ("sound", true) => Command::PlaySoundAndWait(name),
                 _ => unreachable!(),
             }))
         }
@@ -357,26 +424,6 @@ fn parse_flow_command_tokens(
                 tokens[0]
             )),
         },
-        "fade" => {
-            if tokens.get(1).map(String::as_str) != Some("node") {
-                return Err("next element after \"fade\" must be \"node\"".to_string());
-            }
-            let target = match tokens.get(2) {
-                Some(x) => x,
-                None => {
-                    return Err(
-                        "next element after \"node\" must be the name of the node to fade"
-                            .to_string(),
-                    )
-                }
-            }
-            .to_compact_string();
-            if tokens.get(3).map(String::as_str) != Some("over") {
-                return Err("next element after node name must be \"over\"".to_string());
-            }
-            let length = timebases.parse_time(&tokens[3..])?;
-            Ok(Some(Command::FadeNodeOut(target, length)))
-        }
         "set" => {
             let target =
                 match tokens.get(1) {
@@ -395,7 +442,7 @@ fn parse_flow_command_tokens(
         "if" => {
             // If we get here, we're an inline if. No children.
             let (condition, rest) = parse_condition(&tokens[1..])?;
-            let command = match parse_flow_command_tokens(rest, timebases)? {
+            let command = match parse_flow_command_tokens(soundtrack, rest, timebases, None)? {
                 Some(x) => x,
                 None => return Err("there needs to be a command after the \"then\"".to_string()),
             };
@@ -413,12 +460,14 @@ fn parse_flow_command_tokens(
 }
 
 fn parse_node_child_code(
-    node: &mut DinNode,
+    soundtrack: &mut Soundtrack,
+    mut node: DinNode,
     timebases: &TimebaseCollection,
 ) -> Result<Vec<Command>, String> {
+    let lineno = node.lineno;
     let mut timebases = timebases.make_child();
     let mut commands = vec![];
-    for mut child in node.consume_children() {
+    for child in node.consume_children() {
         debug_assert!(!child.items.is_empty());
         if child.items[0] == "timebase" {
             timebases.parse_timebase_node(&child)?;
@@ -428,7 +477,8 @@ fn parse_node_child_code(
                 child.lineno
             ));
         } else if let Some(command) = parse_flow_command_node(
-            &mut child,
+            soundtrack,
+            child,
             &timebases,
             commands.last_mut(),
         )? {
@@ -439,17 +489,15 @@ fn parse_node_child_code(
                 // it was an `else` or `elseif`, and we have nothing to do
             }
         } else {
-            return Err(format!(
-                "line {}: unknown node element {:?}",
-                child.lineno, child.items[0]
-            ));
+            return Err(format!("line {lineno}: unknown node element"));
         }
     }
     Ok(commands)
 }
 
 fn parse_if_body(
-    node: &mut DinNode,
+    soundtrack: &mut Soundtrack,
+    node: DinNode,
     rest: &[String],
     timebases: &TimebaseCollection,
 ) -> Result<Vec<Command>, String> {
@@ -457,14 +505,16 @@ fn parse_if_body(
         if !node.children.is_empty() {
             return Err(format!("{} can have an inline body (right after the \"then\") or children (indented lines afterward) but not both", node.items[0]));
         }
-        let command = match parse_flow_command_tokens(rest, timebases)? {
+        let command = match parse_flow_command_tokens(
+            soundtrack, rest, timebases, None,
+        )? {
             Some(x) => x,
             None => return Err("unknown command after \"then\"".to_string()),
         };
         Ok(vec![command])
     } else {
-        // not an error if no children
-        parse_node_child_code(node, timebases)
+        // not an error if no children, just pointless
+        parse_node_child_code(soundtrack, node, timebases)
     }
 }
 
@@ -477,16 +527,18 @@ fn parse_if_body(
 ///   a preceding `If`
 /// - `Ok(Some(Some(command)))`: A command you must now append to the list
 fn parse_flow_command_node(
-    node: &mut DinNode,
+    soundtrack: &mut Soundtrack,
+    mut node: DinNode,
     timebases: &TimebaseCollection,
     last_command: Option<&mut Command>,
 ) -> Result<Option<Option<Command>>, String> {
+    let lineno = node.lineno;
     if node.items[0] == "if" {
         // If we get here, we might either be an inline if or an expanded one.
         let mut items = vec![];
         std::mem::swap(&mut items, &mut node.items);
         let (condition, rest) = parse_condition(&items[1..])?;
-        let commands = parse_if_body(node, rest, timebases)?;
+        let commands = parse_if_body(soundtrack, node, rest, timebases)?;
         Ok(Some(Some(Command::If {
             branches: vec![(condition, commands)],
             fallback_branch: vec![],
@@ -509,16 +561,16 @@ fn parse_flow_command_node(
             let mut items = vec![];
             std::mem::swap(&mut items, &mut node.items);
             let (condition, rest) = parse_condition(&items[2..])?;
-            let commands = parse_if_body(node, rest, timebases)?;
+            let commands = parse_if_body(soundtrack, node, rest, timebases)?;
             last_branches.push((condition, commands));
         } else {
             // We are an else
-            let commands = parse_if_body(node, &[], timebases)?;
+            let commands = parse_if_body(soundtrack, node, &[], timebases)?;
             if !last_fallback_branch.is_empty() {
-                return Err(format!("line {}: only one \"else\" is allowed for a given \"if\" chain (check indentation)", node.lineno));
+                return Err(format!("line {lineno}: only one \"else\" is allowed for a given \"if\" chain (check indentation)"));
             }
             if commands.is_empty() {
-                return Err(format!("line {}: \"else\" must contain at least oen command (check indentation or delete this line)", node.lineno));
+                return Err(format!("line {lineno}: \"else\" must contain at least oen command (check indentation or delete this line)"));
             }
             *last_fallback_branch = commands;
         }
@@ -536,29 +588,29 @@ fn parse_flow_command_node(
         let mut items = vec![];
         std::mem::swap(&mut items, &mut node.items);
         let (condition, rest) = parse_condition(&items[1..])?;
-        let commands = parse_if_body(node, rest, timebases)?;
+        let commands = parse_if_body(soundtrack, node, rest, timebases)?;
         last_branches.push((condition, commands));
         Ok(Some(None))
     } else {
-        let parsed = parse_flow_command_tokens(&node.items, timebases);
+        let mut items = vec![];
+        std::mem::swap(&mut items, &mut node.items);
+        let parsed = parse_flow_command_tokens(
+            soundtrack,
+            &items,
+            timebases,
+            Some(node),
+        );
         match parsed {
-            Ok(Some(x)) => {
-                if !node.children.is_empty() {
-                    return Err(format!(
-                        "line {}: this element must have no children",
-                        node.lineno
-                    ));
-                }
-                Ok(Some(Some(x)))
-            }
+            Ok(Some(x)) => Ok(Some(Some(x))),
             Ok(None) => Ok(None),
-            Err(x) => Err(format!("line {}: {}", node.lineno, x)),
+            Err(x) => Err(format!("line {lineno}: {}", x)),
         }
     }
 }
 
 impl Node {
     fn parse_node(
+        soundtrack: &mut Soundtrack,
         mut din_node: DinNode,
         timebases: &TimebaseCollection,
     ) -> Result<Node, String> {
@@ -570,8 +622,7 @@ impl Node {
             ));
         }
         let name = din_node.items[1].to_compact_string();
-        let commands = parse_node_child_code(&mut din_node, timebases)?;
-        din_node.finish_parsing_children()?;
+        let commands = parse_node_child_code(soundtrack, din_node, timebases)?;
         Ok(Node {
             name: Some(name),
             commands,
@@ -581,29 +632,30 @@ impl Node {
 
 impl Flow {
     fn parse_din_node(
+        soundtrack: &mut Soundtrack,
         mut node: DinNode,
         timebases: &TimebaseCollection,
-        flows: &HashMap<CompactString, Arc<Flow>>,
     ) -> Result<Flow, String> {
+        let lineno = node.lineno;
         let mut name = None;
-        parse_din_node!(node, "flow" name=*)?;
+        let mut autoloop = false;
+        parse_din_node!(node, "flow" name=* autoloop=["with" "loop"])?;
         let name = name.unwrap().to_compact_string();
         let mut timebases = timebases.make_child();
-        let mut nodes = flows
-            .get(&name)
-            .map(|x| x.nodes.clone())
-            .unwrap_or_default();
+        let mut nodes = HashMap::new();
         let mut start_node = Node::new();
         for mut child in node.consume_children() {
             debug_assert!(!child.items.is_empty());
             if child.items[0] == "timebase" {
                 timebases.parse_timebase_node(&child)?;
             } else if child.items[0] == "node" {
-                let mut node = Node::parse_node(child, &timebases)?;
+                let mut node =
+                    Node::parse_node(soundtrack, child, &timebases)?;
                 Command::flatten_commands(&mut node.commands);
                 nodes.insert(node.name.clone().unwrap(), Arc::new(node));
             } else if let Some(command) = parse_flow_command_node(
-                &mut child,
+                soundtrack,
+                child,
                 &timebases,
                 start_node.commands.last_mut(),
             )? {
@@ -614,10 +666,7 @@ impl Flow {
                     // it was an `else` or `elseif`, and we have nothing to do
                 }
             } else {
-                return Err(format!(
-                    "line {}: unknown flow element {:?}",
-                    child.lineno, child.items[0]
-                ));
+                return Err(format!("line {lineno}: unknown flow element"));
             }
         }
         Command::flatten_commands(&mut start_node.commands);
@@ -625,6 +674,7 @@ impl Flow {
             name,
             start_node: Arc::new(start_node),
             nodes,
+            autoloop,
         };
         Ok(new_flow)
     }
@@ -650,12 +700,12 @@ impl Soundtrack {
                     let mut name = None;
                     parse_din_node!(node, "sequence" name=*)?;
                     let name = name.unwrap().to_compact_string();
-                    let sequence = Sequence::parse_din_node(node, &timebases, name.clone())?;
+                    let sequence = Sequence::parse_din_node(&mut self, node, &timebases, name.clone())?;
                     debug_assert_eq!(sequence.name, name);
                     self.sequences.insert(name, Arc::new(sequence));
                 }
                 "flow" => {
-                    let flow = Flow::parse_din_node(node, &timebases, &self.flows)?;
+                    let flow = Flow::parse_din_node(&mut self, node, &timebases)?;
                     self.flows.insert(flow.name.clone(), Arc::new(flow));
                 }
                 "region" => {
@@ -707,6 +757,9 @@ impl Command {
             } else {
                 n += 1;
             }
+        }
+        if commands.last() != Some(&Command::Done) {
+            commands.push(Command::Done);
         }
     }
     /// Performs one level of flattening. You'll still need to run the
