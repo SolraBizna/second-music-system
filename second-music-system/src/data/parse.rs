@@ -283,8 +283,10 @@ fn parse_flow_command_tokens(
     if let Some(din_node) = din_node.as_ref() {
         // except for "play", we won't be parsing any node here that is allowed
         // to have children
-        if tokens[0] != "play" && din_node.children.len() > 0 {
-            return Err(format!("TODO: write good error message :thumbsup:"));
+        if tokens[0] != "play" && !din_node.children.is_empty() {
+            return Err(
+                "this command is not allowed to have children".to_string()
+            );
         }
     }
     match tokens[0].as_str() {
