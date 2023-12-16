@@ -93,9 +93,49 @@ macro_rules! unmatch_din_subpattern {
 }
 
 #[macro_export]
+macro_rules! enumerate_homers {
+    ($homer:literal) => {
+        $homer
+    };
+    ($homer:literal | $($rest:literal)|+) => {
+        concat!($homer, "|", $crate::enumerate_homers!($($rest)|+))
+    };
+}
+
+#[macro_export]
+macro_rules! sub_describe_din_pattern {
+    () => {""};
+    // !"foo" => match if next item is not "foo" (and don't consume it)
+    // (don't show this information in the description)
+    (!$homer:literal $($rest:tt)*) => {
+        concat!("", $crate::sub_describe_din_pattern!($($rest)*))
+    };
+    // "foo" => match if next item is "foo"
+    ($homer:literal $($rest:tt)*) => {
+        concat!(" ", $homer, $crate::sub_describe_din_pattern!($($rest)*))
+    };
+    // foo=("bar"|"baz"|...) => match if next item is one of "bar", "baz", ...
+    // and assign it to the variable foo
+    ($name:path=($($homers:tt)*) $($rest:tt)*) => {
+        concat!(" (", $crate::enumerate_homers!($($homers)*), ")", $crate::sub_describe_din_pattern!($($rest)*))
+    };
+    // foo=* => match if there is a next item, and assign it to the variable foo
+    ($homer:path=* $($rest:tt)*) => {
+        concat!(" \"<", stringify!($homer), ">\"", $crate::sub_describe_din_pattern!($($rest)*))
+    };
+    // "[...]" => if ... matches, consume it. if it doesn't, consume nothing.
+    // always matches.
+    // "foo=[...]"
+    // as above, but puts whether it matched or not into foo
+    ($($did_match:path =)? [$($subpattern:tt)+] $($rest:tt)*) => {
+        concat!(" [", $crate::sub_describe_din_pattern!($($subpattern)+), " ]", $crate::sub_describe_din_pattern!($($rest)*))
+    };
+}
+
+#[macro_export]
 macro_rules! describe_din_node_pattern {
-    ($($_pattern:tt)*) => {
-        "expected stuff, found TODO".to_string()
+    ($($pattern:tt)*) => {
+        concat!("expected something like:", $crate::sub_describe_din_pattern!($($pattern)*))
     };
 }
 
@@ -113,7 +153,7 @@ macro_rules! parse_din_node {
             }
         };
         if success { Ok(()) }
-        else { Err($crate::describe_din_node_pattern!($($pattern)+)) }
+        else { Err($crate::describe_din_node_pattern!($($pattern)+).to_string()) }
     }}
 }
 
