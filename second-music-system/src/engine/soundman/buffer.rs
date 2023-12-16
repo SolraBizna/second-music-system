@@ -251,7 +251,7 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for BufferMan<Runtime> {
         &mut self,
         sound: &str,
         start: PosFloat,
-        end: PosFloat,
+        end: &OnceLock<PosFloat>,
     ) -> Option<FormattedSoundStream> {
         self.sounds.get_mut(sound).and_then(|s| {
             s.check_loading(&self.delegate, sound);
@@ -292,14 +292,28 @@ fn new_buffer_stream(
     format: &Format,
     vec: FormattedVec,
     start: PosFloat,
-    end: PosFloat,
+    end: &OnceLock<PosFloat>,
 ) -> FormattedSoundStream {
     let cursor = start
         .seconds_to_samples(format.sample_rate, format.speaker_layout)
         .min(vec.len() as u64) as usize;
-    let end = end
-        .seconds_to_samples(format.sample_rate, format.speaker_layout)
-        .min(vec.len() as u64) as usize;
+    let end = match end.get() {
+        Some(end) => {
+            // End point is specified or cached.
+            end.seconds_to_samples(format.sample_rate, format.speaker_layout)
+                .min(vec.len() as u64) as usize
+        }
+        None => {
+            // End point is not specified. Fill it in.
+            let new_end = PosFloat::new(
+                (vec.len() / format.speaker_layout.get_num_channels()) as f32,
+            )
+            .expect("SMS bug: Buffer too big, couldn't make float!")
+                / format.sample_rate;
+            end.get_or_init(|| new_end);
+            vec.len()
+        }
+    };
     let sample_rate = format.sample_rate;
     let speaker_layout = format.speaker_layout;
     let reader = match vec {

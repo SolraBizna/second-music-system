@@ -1153,7 +1153,17 @@ impl Engine {
                         },
                         Command::PlaySoundAndWait(sound_name) => {
                             let sleep_time = Self::execute_sound(&self.live_soundtrack, self.sample_rate, now, &active_node.flow_name, active_node.node.name.as_ref().map(CompactString::as_str), sound_name, &mut self.sound_delegate, &mut self.queued_sounds, DEFAULT_CHANNEL, PosFloat::ZERO, None, PosFloat::ZERO);
-                            active_node.next_instruction_time = now + sleep_time;
+                            if sleep_time == u64::MAX {
+                                if let Some(sound) = self.live_soundtrack.sounds.get(sound_name.as_str()) {
+                                    // this will warn the author what happened,
+                                    // and ensure that there will be a place-
+                                    // holder value for next time
+                                    let _ = sound.get_end(&*self.sound_delegate);
+                                }
+                                active_node.next_instruction_time = now + *self.sample_rate as u64;
+                            } else {
+                                active_node.next_instruction_time = now + sleep_time;
+                            }
                             break;
                         },
                         Command::PlaySequence(seqname) => {
@@ -1564,8 +1574,9 @@ impl Engine {
             }
         };
         let ret = length
-            .unwrap_or_else(|| sound.end.saturating_sub(sound.start))
-            .seconds_to_frames(sample_rate);
+            .or_else(|| sound.end.get().map(|x| x.saturating_sub(sound.start)))
+            .map(|x| x.seconds_to_frames(sample_rate))
+            .unwrap_or(u64::MAX);
         queued_sounds.push(QueuedSound {
             when,
             who: PlayingSoundID {

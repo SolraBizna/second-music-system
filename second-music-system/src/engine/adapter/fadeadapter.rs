@@ -35,10 +35,14 @@ impl<T: Sample> FadeAdapter<T> {
         source_stream: Box<dyn SoundReader<T>>,
     ) -> Box<dyn SoundReader<f32>> {
         let num_channels = speaker_layout.get_num_channels() as u64;
-        let samples_in_sound = ((sound.end.saturating_sub(sound.start))
-            * sample_rate)
-            .ceil() as u64
-            * num_channels;
+        let samples_in_sound = sound
+            .end
+            .get()
+            .map(|end| {
+                ((end.saturating_sub(sound.start)) * sample_rate).ceil() as u64
+                    * num_channels
+            })
+            .unwrap_or(u64::MAX);
         let samples_till_fade_out;
         let samples_left;
         if let Some(how_long_to_play_before_fade) =

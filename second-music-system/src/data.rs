@@ -2,7 +2,7 @@
 
 use super::*;
 
-use std::{borrow::Cow, collections::HashSet, str::FromStr};
+use std::{borrow::Cow, collections::HashSet, str::FromStr, sync::OnceLock};
 
 mod parse;
 
@@ -125,11 +125,21 @@ pub(crate) struct Sound {
     pub(crate) name: CompactString,
     pub(crate) path: CompactString,
     pub(crate) start: PosFloat,
-    pub(crate) end: PosFloat,
+    // Will either be set in the soundtrack or backfilled after load.
+    pub(crate) end: OnceLock<PosFloat>,
     /// If true, the underlying audio file should be streamed, rather than
     /// cached. (If some sounds request that it be streamed and others request
     /// that it be cached, whether it is streamed or cached is undefined.)
     pub(crate) stream: bool,
+}
+
+impl Sound {
+    pub(crate) fn get_end(&self, delegate: &dyn SoundDelegate) -> PosFloat {
+        *self.end.get_or_init(|| {
+            delegate.warning(&format!("The length of sound {:?} is needed, but was not specified in the soundtrack, and could not be retrieved because the sound is marked for streaming. Set the length manually or disable streaming.", self.name));
+            PosFloat::ONE
+        })
+    }
 }
 
 #[derive(Debug, PartialEq)]

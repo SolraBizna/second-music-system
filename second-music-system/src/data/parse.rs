@@ -75,17 +75,11 @@ impl Sound {
                     node.lineno
                 ))
             }
-            (Some(x), None) => *x + offset,
-            (None, Some(x)) => start + *x,
-            (None, None) => {
-                return Err(format!(
-                    "line {}: one of \"end\" or \"length\" must be specified",
-                    node.lineno
-                ))
-            }
+            (Some(x), None) => Some(*x + offset),
+            (None, Some(x)) => Some(start + *x),
+            (None, None) => None,
         };
         node.finish_parsing_children()?;
-        // TODO: fade out requires length
         let path = match path {
             Some(path) => path.to_compact_string(),
             None => {
@@ -95,11 +89,15 @@ impl Sound {
                 name.clone()
             }
         };
+        let end_lock = OnceLock::new();
+        if let Some(end) = end {
+            end_lock.set(end).unwrap();
+        }
         Ok(Sound {
             name,
             path,
             start,
-            end,
+            end: end_lock,
             stream,
         })
     }

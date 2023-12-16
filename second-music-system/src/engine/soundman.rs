@@ -1,4 +1,4 @@
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, sync::OnceLock};
 
 use super::*;
 
@@ -41,7 +41,7 @@ pub(crate) trait SoundManSubtype<Runtime: TaskRuntime> {
         &mut self,
         sound: &str,
         start: PosFloat,
-        end: PosFloat,
+        end: &OnceLock<PosFloat>,
     ) -> Option<FormattedSoundStream>;
 }
 
@@ -191,15 +191,20 @@ impl<Runtime: TaskRuntime> GenericSoundMan for SoundMan<Runtime> {
                 sound_type: SoundType::Buffered,
                 ..
             }) => {
-                self.bufferman
-                    .get_sound(&sound.path, sound.start, sound.end)
+                let result = self.bufferman.get_sound(
+                    &sound.path,
+                    sound.start,
+                    &sound.end,
+                );
+                sound.end.get_or_init(|| todo!());
+                result
             }
             Some(SoundInfo {
                 sound_type: SoundType::Streamed,
                 ..
             }) => {
                 self.streamman
-                    .get_sound(&sound.path, sound.start, sound.end)
+                    .get_sound(&sound.path, sound.start, &sound.end)
             }
         }
     }

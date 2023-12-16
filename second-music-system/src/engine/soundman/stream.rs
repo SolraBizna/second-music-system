@@ -421,7 +421,7 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for StreamMan<Runtime> {
         &mut self,
         sound: &str,
         start: PosFloat,
-        _end: PosFloat,
+        _end: &OnceLock<PosFloat>,
     ) -> Option<FormattedSoundStream> {
         // Note: We don't need to worry about `_end`. The stream we return is
         // already going to be put through `FadeAdapter`.

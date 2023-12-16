@@ -35,7 +35,9 @@ pub(crate) fn adaptify(
         sound,
         stream,
         fade_in,
-        Some(length.unwrap_or_else(|| sound.end.saturating_sub(sound.start))),
+        length.or_else(|| {
+            sound.end.get().map(|x| x.saturating_sub(sound.start))
+        }),
         fade_out,
     );
     let need_chan_adapter = in_speaker_layout != out_speaker_layout;
