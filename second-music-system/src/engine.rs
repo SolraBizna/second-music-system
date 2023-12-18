@@ -1093,8 +1093,6 @@ impl Engine {
         // TODO: slim this, Bloom filter?
         let mut seen_flows =
             HashSet::with_capacity(self.active_flow_nodes.len() * 2);
-        let mut seen_nodes =
-            HashSet::with_capacity(self.active_flow_nodes.len() * 2);
         while !out.is_empty() {
             let now = self.mixer.get_next_output_sample_frame_number();
             // Here, at this command boundary, evaluate any commands we might
@@ -1357,7 +1355,7 @@ impl Engine {
             }
         }
         self.mix_buf = mix_buf;
-        self.kill_the_unseen(seen_flows, seen_nodes);
+        self.kill_the_unseen(seen_flows);
     }
     /// Returns the number of sample frames left to output before the next
     /// scheduled `Node` command or `Region` start, or none if the schedule is
@@ -1394,8 +1392,6 @@ impl Engine {
         self.deferred_kill = false;
         let mut seen_flows =
             HashSet::with_capacity(self.active_flow_nodes.len() * 2);
-        let mut seen_nodes =
-            HashSet::with_capacity(self.active_flow_nodes.len() * 2);
         self.mixer.bump(VolumeGetWrapper {
             mix_controls: &mut self.mix_controls,
             flow_volumes: &mut self.flow_volumes,
@@ -1403,15 +1399,11 @@ impl Engine {
             starting_flows: &self.starting_flows,
             seen_flows: &mut seen_flows,
         });
-        self.kill_the_unseen(seen_flows, seen_nodes);
+        self.kill_the_unseen(seen_flows);
     }
     /// Make nodes, flows, and mix controls that were not processed and (if
     /// relevant) have zero current volume stop existing.
-    fn kill_the_unseen(
-        &mut self,
-        seen_flows: HashSet<CompactString>,
-        seen_nodes: HashSet<StringAndAHalf>,
-    ) {
+    fn kill_the_unseen(&mut self, seen_flows: HashSet<CompactString>) {
         self.flow_volumes.retain(|k, _| {
             // We will stay alive if any of the below are true:
             // - any samples were mixed from this flow
