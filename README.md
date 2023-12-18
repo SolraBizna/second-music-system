@@ -8,7 +8,7 @@ With Second Music System, you can make complex compositions that shift and branc
 
 # For scripters
 
-With Second Music System, you can expose as much or as little information as you like about your game status to the soundtrack. The composers can use as much or as little of that information as they want, and all of this power is available with very little work from the engine itself.
+With Second Music System, you can expose as much or as little information as you like about your game status to the soundtrack. Composers can use as much or as little of that information as they want, and all of this power is available with very little work from the engine itself.
 
 # For programmers
 
