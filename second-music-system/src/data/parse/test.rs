@@ -4,6 +4,8 @@ use super::*;
 fn new_sound_parse() {
     let node = node!(1, ["sound", "test1.mp3"], [node!(2, ["length", "32"]),]);
     let timebases = TimebaseCollection::new();
+    let end = OnceLock::new();
+    end.set(PosFloat::new_clamped(32.0)).unwrap();
     assert_eq!(
         Sound::parse_din_node(
             node,
@@ -15,7 +17,7 @@ fn new_sound_parse() {
             name: "test1.mp3".to_compact_string(),
             path: "test1.mp3".to_compact_string(),
             start: PosFloat::ZERO,
-            end: PosFloat::new_clamped(32.0),
+            end,
             stream: false,
         }
     );
@@ -29,6 +31,8 @@ sound test1.mp3
     "#,
     )
     .unwrap();
+    let end = OnceLock::new();
+    end.set(PosFloat::new_clamped(32.0)).unwrap();
     assert_eq!(soundtrack.sounds.len(), 1);
     assert_eq!(
         **soundtrack.sounds.get("test1.mp3").unwrap(),
@@ -36,7 +40,7 @@ sound test1.mp3
             name: "test1.mp3".to_compact_string(),
             path: "test1.mp3".to_compact_string(),
             start: PosFloat::ZERO,
-            end: PosFloat::new_clamped(32.0),
+            end,
             stream: false,
         }
     );
