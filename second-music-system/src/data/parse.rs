@@ -273,6 +273,8 @@ impl SequenceElement {
 
 fn parse_flow_command_tokens(
     soundtrack: &mut Soundtrack,
+    flow_name: &str,
+    node_name: Option<&str>,
     tokens: &[String],
     timebases: &TimebaseCollection,
     din_node: Option<DinNode>,
@@ -321,11 +323,16 @@ fn parse_flow_command_tokens(
                 None => {
                     anonymous = true;
                     match din_node.as_ref() {
-                        Some(x) => format!("[[{}]]", x.lineno).to_compact_string(),
+                        Some(x) => {
+                            if let Some(node_name) = node_name {
+                                format!("{flow_name}::{node_name}[{}]", x.lineno)
+                            }
+                            else {
+                                format!("{flow_name}[{}]", x.lineno)
+                            }.to_compact_string()
+                        },
                         None => "".to_compact_string(), // won't get used
                     }
-                    // TODO: no! this!
-                    //format!("{flow_name}::{node_name}[{lineno}]", flow_name = todo!(), node_name = todo!(), lineno = todo!()).to_compact_string()
                 }
                 Some(x) => {
                     anonymous = false;
@@ -338,14 +345,14 @@ fn parse_flow_command_tokens(
                         match element_type {
                             "sound" => {
                                 let sound =
-                                    Sound::parse_din_node(din_node, &timebases, name.clone())?;
+                                    Sound::parse_din_node(din_node, timebases, name.clone())?;
                                 soundtrack.sounds.insert(name.clone(), Arc::new(sound));
                             }
                             "sequence" => {
                                 let sequence = Sequence::parse_din_node(
                                     soundtrack,
                                     din_node,
-                                    &timebases,
+                                    timebases,
                                     name.clone(),
                                 )?;
                                 soundtrack
@@ -442,7 +449,7 @@ fn parse_flow_command_tokens(
         "if" => {
             // If we get here, we're an inline if. No children.
             let (condition, rest) = parse_condition(&tokens[1..])?;
-            let command = match parse_flow_command_tokens(soundtrack, rest, timebases, None)? {
+            let command = match parse_flow_command_tokens(soundtrack, flow_name, node_name, rest, timebases, None)? {
                 Some(x) => x,
                 None => return Err("there needs to be a command after the \"then\"".to_string()),
             };
@@ -461,6 +468,8 @@ fn parse_flow_command_tokens(
 
 fn parse_node_child_code(
     soundtrack: &mut Soundtrack,
+    flow_name: &str,
+    node_name: &str,
     mut node: DinNode,
     timebases: &TimebaseCollection,
 ) -> Result<Vec<Command>, String> {
@@ -478,6 +487,8 @@ fn parse_node_child_code(
             ));
         } else if let Some(command) = parse_flow_command_node(
             soundtrack,
+            flow_name,
+            Some(node_name),
             child,
             &timebases,
             commands.last_mut(),
@@ -497,6 +508,8 @@ fn parse_node_child_code(
 
 fn parse_if_body(
     soundtrack: &mut Soundtrack,
+    flow_name: &str,
+    node_name: &str,
     node: DinNode,
     rest: &[String],
     timebases: &TimebaseCollection,
@@ -506,7 +519,12 @@ fn parse_if_body(
             return Err(format!("{} can have an inline body (right after the \"then\") or children (indented lines afterward) but not both", node.items[0]));
         }
         let command = match parse_flow_command_tokens(
-            soundtrack, rest, timebases, None,
+            soundtrack,
+            flow_name,
+            Some(node_name),
+            rest,
+            timebases,
+            None,
         )? {
             Some(x) => x,
             None => return Err("unknown command after \"then\"".to_string()),
@@ -514,7 +532,9 @@ fn parse_if_body(
         Ok(vec![command])
     } else {
         // not an error if no children, just pointless
-        parse_node_child_code(soundtrack, node, timebases)
+        parse_node_child_code(
+            soundtrack, flow_name, node_name, node, timebases,
+        )
     }
 }
 
@@ -528,22 +548,32 @@ fn parse_if_body(
 /// - `Ok(Some(Some(command)))`: A command you must now append to the list
 fn parse_flow_command_node(
     soundtrack: &mut Soundtrack,
+    flow_name: &str,
+    node_name: Option<&str>,
     mut node: DinNode,
     timebases: &TimebaseCollection,
     last_command: Option<&mut Command>,
 ) -> Result<Option<Option<Command>>, String> {
     let lineno = node.lineno;
     if node.items[0] == "if" {
+        let node_name = node_name.ok_or(format!(
+            "line {lineno}: \"if\" not allowed outside of node"
+        ))?;
         // If we get here, we might either be an inline if or an expanded one.
         let mut items = vec![];
         std::mem::swap(&mut items, &mut node.items);
         let (condition, rest) = parse_condition(&items[1..])?;
-        let commands = parse_if_body(soundtrack, node, rest, timebases)?;
+        let commands = parse_if_body(
+            soundtrack, flow_name, node_name, node, rest, timebases,
+        )?;
         Ok(Some(Some(Command::If {
             branches: vec![(condition, commands)],
             fallback_branch: vec![],
         })))
     } else if node.items[0] == "else" {
+        let node_name = node_name.ok_or(format!(
+            "line {lineno}: \"else\" not allowed outside of node"
+        ))?;
         let (last_branches, last_fallback_branch) = match last_command {
             Some(Command::If {
                 branches,
@@ -561,11 +591,20 @@ fn parse_flow_command_node(
             let mut items = vec![];
             std::mem::swap(&mut items, &mut node.items);
             let (condition, rest) = parse_condition(&items[2..])?;
-            let commands = parse_if_body(soundtrack, node, rest, timebases)?;
+            let commands = parse_if_body(
+                soundtrack, flow_name, node_name, node, rest, timebases,
+            )?;
             last_branches.push((condition, commands));
         } else {
             // We are an else
-            let commands = parse_if_body(soundtrack, node, &[], timebases)?;
+            let commands = parse_if_body(
+                soundtrack,
+                flow_name,
+                node_name,
+                node,
+                &[],
+                timebases,
+            )?;
             if !last_fallback_branch.is_empty() {
                 return Err(format!("line {lineno}: only one \"else\" is allowed for a given \"if\" chain (check indentation)"));
             }
@@ -576,6 +615,9 @@ fn parse_flow_command_node(
         }
         Ok(Some(None))
     } else if node.items[0] == "elseif" {
+        let node_name = node_name.ok_or(format!(
+            "line {lineno}: \"elseif\" not allowed outside of node"
+        ))?;
         let last_branches = match last_command {
             Some(Command::If { branches, .. }) => branches,
             _ => {
@@ -588,7 +630,9 @@ fn parse_flow_command_node(
         let mut items = vec![];
         std::mem::swap(&mut items, &mut node.items);
         let (condition, rest) = parse_condition(&items[1..])?;
-        let commands = parse_if_body(soundtrack, node, rest, timebases)?;
+        let commands = parse_if_body(
+            soundtrack, flow_name, node_name, node, rest, timebases,
+        )?;
         last_branches.push((condition, commands));
         Ok(Some(None))
     } else {
@@ -596,6 +640,8 @@ fn parse_flow_command_node(
         std::mem::swap(&mut items, &mut node.items);
         let parsed = parse_flow_command_tokens(
             soundtrack,
+            flow_name,
+            node_name,
             &items,
             timebases,
             Some(node),
@@ -611,7 +657,8 @@ fn parse_flow_command_node(
 impl Node {
     fn parse_node(
         soundtrack: &mut Soundtrack,
-        mut din_node: DinNode,
+        flow_name: &str,
+        din_node: DinNode,
         timebases: &TimebaseCollection,
     ) -> Result<Node, String> {
         assert_eq!(din_node.items[0], "node");
@@ -622,7 +669,9 @@ impl Node {
             ));
         }
         let name = din_node.items[1].to_compact_string();
-        let commands = parse_node_child_code(soundtrack, din_node, timebases)?;
+        let commands = parse_node_child_code(
+            soundtrack, flow_name, &name, din_node, timebases,
+        )?;
         Ok(Node {
             name: Some(name),
             commands,
@@ -644,17 +693,19 @@ impl Flow {
         let mut timebases = timebases.make_child();
         let mut nodes = HashMap::new();
         let mut start_node = Node::new();
-        for mut child in node.consume_children() {
+        for child in node.consume_children() {
             debug_assert!(!child.items.is_empty());
             if child.items[0] == "timebase" {
                 timebases.parse_timebase_node(&child)?;
             } else if child.items[0] == "node" {
                 let mut node =
-                    Node::parse_node(soundtrack, child, &timebases)?;
+                    Node::parse_node(soundtrack, &name, child, &timebases)?;
                 Command::flatten_commands(&mut node.commands);
                 nodes.insert(node.name.clone().unwrap(), Arc::new(node));
             } else if let Some(command) = parse_flow_command_node(
                 soundtrack,
+                &name,
+                None,
                 child,
                 &timebases,
                 start_node.commands.last_mut(),
