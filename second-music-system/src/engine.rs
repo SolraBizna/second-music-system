@@ -6,7 +6,6 @@ use std::{
     collections::{BinaryHeap, HashMap, HashSet},
     fmt::{Debug, Formatter, Result as FmtResult},
     mem::{swap, MaybeUninit},
-    num::NonZeroUsize,
 };
 
 mod mixer;
@@ -973,16 +972,17 @@ impl Engine {
     ///   exact number of hardware threads.
     /// - `affinity`: Offset added to core affinity of threads. When in doubt,
     ///   use `0`.
+    #[cfg(feature = "switchyard")]
     pub fn new(
         sound_delegate: Arc<dyn SoundDelegate>,
         speaker_layout: SpeakerLayout,
         sample_rate: PosFloat,
-        num_threads: Option<NonZeroUsize>,
+        num_threads: Option<std::num::NonZeroUsize>,
         affinity: usize,
     ) -> Engine {
         let num_logical_cores = num_cpus::get();
         let num_threads = num_threads
-            .map(NonZeroUsize::get)
+            .map(std::num::NonZeroUsize::get)
             .unwrap_or_else(|| num_cpus::get() / 3)
             .max(1);
         use ::switchyard::{threads::ThreadAllocationOutput, Switchyard};
