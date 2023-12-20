@@ -485,6 +485,7 @@ fn anonymous_sound_with_no_path_parse() {
     )
     .unwrap();
 }
+
 #[test]
 #[should_panic]
 fn reject_wackadoodle_indentation() {
@@ -509,6 +510,41 @@ fn reject_wackadoodle_indentation() {
                 SequenceElement::PlaySound {
                     sound: "foo".to_compact_string(),
                     channel: "bar".to_compact_string(),
+                    fade_in: PosFloat::ZERO,
+                    length: None,
+                    fade_out: PosFloat::ZERO,
+                }
+            ),],
+        }
+    );
+}
+
+#[test]
+fn ignore_editor_nodes() {
+    let soundtrack = Soundtrack::from_source(
+        r#"sequence test
+  length 0
+  play sound "foo"
+    at 0
+    editor:
+    editor:asdf
+    editor: asdf
+    editor:asdf asdf
+"#,
+    )
+    .unwrap();
+    let end = OnceLock::new();
+    end.set(PosFloat::ZERO).unwrap();
+    assert_eq!(
+        **soundtrack.sequences.get("test").unwrap(),
+        Sequence {
+            name: "test".to_compact_string(),
+            length: PosFloat::ZERO,
+            elements: vec![(
+                PosFloat::ZERO,
+                SequenceElement::PlaySound {
+                    sound: "foo".to_compact_string(),
+                    channel: "main".to_compact_string(),
                     fade_in: PosFloat::ZERO,
                     length: None,
                     fade_out: PosFloat::ZERO,

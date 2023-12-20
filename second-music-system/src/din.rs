@@ -163,6 +163,10 @@ pub fn parse_din(src: &str) -> Result<Vec<DinNode>, String> {
             }),
             ParseItem::EndNode => {
                 let endut = stack.pop().unwrap();
+                // Ignore nodes that start with "editor:"
+                if endut.items[0].starts_with("editor:") {
+                    continue;
+                }
                 match stack.last_mut() {
                     Some(x) => x.children.push(Some(endut)),
                     None => ret.push(endut),
