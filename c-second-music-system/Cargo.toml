@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 second-music-system = {version = "=0.1.0", path = "../second-music-system", features=["ffi-expose-issuer"]}
-libc = "*"
+libc = "0.2.151"
 paste = "1.0.14"
 function_name = "0.3.0"
 compact_str = "0.7.1"
