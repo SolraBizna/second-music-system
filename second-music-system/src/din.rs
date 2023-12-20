@@ -1,6 +1,6 @@
 //! Descriptively Indented Nodes
 
-use std::mem::take;
+use std::{cmp::Ordering, mem::take};
 
 #[cfg(test)]
 macro_rules! node {
@@ -53,13 +53,18 @@ impl Iterator for DinParser<'_> {
             if let Some(node) = self.nodes_to_yield.pop() {
                 return Some(Ok(node));
             }
-            let mut indentation_level = 0;
+            let mut space_count = 0;
             while let Some(x) = self.rem.first() {
-                if *x == b' ' || *x == b'\t' {
-                    self.rem = &self.rem[1..];
-                    indentation_level += 1;
-                } else {
-                    break;
+                match *x {
+                    b' ' => {
+                        self.rem = &self.rem[1..];
+                        space_count += 1;
+                    }
+                    b'\t' => return Some(Err(format!(
+                        "line {}: indentation contains tabs, which are not allowed",
+                        self.lineno,
+                    ))),
+                    _ => break,
                 }
             }
             let end_index = self
@@ -80,17 +85,44 @@ impl Iterator for DinParser<'_> {
                 }
             };
             if !parsed.is_empty() {
+                // Note: since nodes_to_yield is treated as a stack, nodes will
+                // be yielded in the reverse of the order seen here.
                 self.nodes_to_yield
                     .push(ParseItem::BeginNode(parsed, self.lineno));
-                while let Some(prev_level) = self.indentation_levels.last() {
-                    if *prev_level >= indentation_level {
-                        self.nodes_to_yield.push(ParseItem::EndNode);
-                        self.indentation_levels.pop();
-                    } else {
-                        break;
+                if self.indentation_levels.is_empty() {
+                    if space_count != 0 {
+                        return Some(Err(format!("line {}: top level nodes may not be intented (delete the spaces)", self.lineno)));
+                    }
+                    self.indentation_levels.push(0);
+                } else {
+                    let mut have_popped = false;
+                    while let Some(sibling_level) =
+                        self.indentation_levels.last()
+                    {
+                        match space_count.cmp(sibling_level) {
+                            Ordering::Less => {
+                                // End nibling AND pop that indentation level
+                                self.nodes_to_yield.push(ParseItem::EndNode);
+                                self.indentation_levels.pop();
+                                have_popped = true;
+                            }
+                            Ordering::Equal => {
+                                // Fratricide.
+                                self.nodes_to_yield.push(ParseItem::EndNode);
+                                break;
+                            }
+                            Ordering::Greater => {
+                                if have_popped {
+                                    return Some(Err(format!("line {}: confusingly inconsistent indentation (adjust the spaces)", self.lineno)));
+                                } else {
+                                    // We are a child, nobody needs to die yet
+                                    self.indentation_levels.push(space_count);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
-                self.indentation_levels.push(indentation_level);
             }
             self.rem = &self.rem[end_index..];
             while let Some(x) = self.rem.first() {
