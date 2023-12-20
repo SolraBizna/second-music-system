@@ -1,9 +1,14 @@
 [package]
 name = "second-music-system"
 version = "0.1.0"
+authors = ["Noah Obert <contact@noahobert.com>", "Solra Bizna <solra@bizna.name>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Portable, open source video game music middleware"
+readme = "../README.md"
+repository = "https://github.com/SolraBizna/second-music-system"
+license = "MIT OR Apache-2.0"
+keywords = ["gamedev", "middleware", "music"]
+categories = ["game-development", "multimedia::audio"]
 
 [dependencies]
 # We use `Arcow` to reduce the memory overhead of having multiple "copies" of a

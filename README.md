@@ -1,10 +1,12 @@
 Second Music System is a middleware library focused on dynamic music. It gives a lot of flexibility to composers, while being as easy as possible to integrate into an existing game engine, partly by having no opinions on the details of audio input or output.
 
-It is still in an early phase of development. Documentation and tooling are sparse. Performance is good, but not yet what it could be. The API and soundtrack format may be subject to change.
+**Second Music System is still in an early phase of development.** Documentation and tooling are sparse. Performance is good, but not yet what it could be. The API and soundtrack format may be subject to change.
 
 # For composers
 
-With Second Music System, you can make complex compositions that shift and branch in response to conditions and events in the game, with minimal support from programmers or scripters. Unfortunately, this currently requires you to work in SMS's [soundtrack language](SOUNDTRACKS.md) directly, and thus requires a little bit of "programming". Tooling may make this a little easier in the future, but the fundamental heart of an SMS soundtrack is always going to be this language.
+With Second Music System, you can make complex compositions that shift and branch in response to conditions and events in the game, with minimal support from programmers or scripters. Unfortunately, this currently requires you to work in SMS's [soundtrack language][1] directly, and thus requires a little bit of "programming". Tooling may make this a little easier in the future, but the fundamental core of an SMS soundtrack is always going to be this language.
+
+[1]: https://github.com/SolraBizna/second-music-system/blob/main/SOUNDTRACKS.md
 
 # For scripters
 

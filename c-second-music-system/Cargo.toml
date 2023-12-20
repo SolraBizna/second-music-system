@@ -2,8 +2,13 @@
 name = "c-second-music-system"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Noah Obert <contact@noahobert.com>", "Solra Bizna <solra@bizna.name>"]
+description = "C binding to the `second-music-system` crate"
+readme = "README.md"
+repository = "https://github.com/SolraBizna/second-music-system"
+license = "MIT OR Apache-2.0"
+keywords = ["gamedev", "middleware", "music"]
+categories = ["game-development", "multimedia::audio"]
 
 [dependencies]
 second-music-system = {version = "=0.1.0", path = "../second-music-system", features=["ffi-expose-issuer"]}
