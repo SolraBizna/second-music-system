@@ -1,6 +1,22 @@
 This is a nearly-complete C binding for the Second Music System. It follows the Rust API as closely as possible. It is thoroughly documented in the header file.
 
-`cargo build --release` will be involved in your build process, but otherwise you're currently on your own.
+# Installation
+
+Install Rust. [The easiest way is to use rustup.](https://www.rust-lang.org/learn/get-started)
+
+If you have a UNIX-like environment, install a Nightly toolchain (`rustup install nightly`) and:
+
+```sh
+cd ...path/to/c-second-music-system
+./setup.sh --nightly --build
+sudo ./setup.sh --nightly --install
+```
+
+(If you don't mind the binary being more than twice as large, you can do without Nightly and omit `--nightly` from the above commands.)
+
+`setup.sh` has several options that control it. Try `./setup.sh --help` for usage information.
+
+In other environments, `cargo build --release` will give you a static library in `../target/release`. Install that in the appropriate place for your environment, likewise the headers from `include`.
 
 # Legalese
 
