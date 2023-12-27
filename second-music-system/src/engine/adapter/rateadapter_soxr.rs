@@ -1,5 +1,7 @@
 //! The rate adapter ingests a stream at one sample rate, and produces a stream
-//! at another sample rate.
+//! at another sample rate. This implementation uses the soxr library, which
+//! is licensed under the LGPL. It is in place because you used the default set
+//! of features, or explicitly requested the `resample-soxr` feature.
 
 use crate::*;
 

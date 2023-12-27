@@ -4,6 +4,11 @@ mod fadeadapter;
 use fadeadapter::*;
 mod chanadapter;
 use chanadapter::*;
+#[cfg(feature = "resample-soxr")]
+#[path = "adapter/rateadapter_soxr.rs"]
+mod rateadapter;
+#[cfg(not(feature = "resample-soxr"))]
+#[path = "adapter/rateadapter_terrible.rs"]
 mod rateadapter;
 use rateadapter::*;
 

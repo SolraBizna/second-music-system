@@ -24,8 +24,9 @@ derivative = "2.2"
 # We use futures to schedule loading, even if we're doing foreground loading.
 # (We have our own thin built-in runtime for the foreground case.)
 futures = "0.3.29"
-# We use this library to resample sounds if needed.
-libsoxr = "0.2.9"
+# We can use this library to resample sounds, if there isn't a conflict with
+# LGPL.
+libsoxr = {optional=true, version="0.2.9"}
 # If the "switchyard" feature is enabled, we use this crate to decide how many
 # threads we should spawn for background loading (if the caller didn't request
 # a specific number).
@@ -48,7 +49,10 @@ tokio = {optional=true, version = "1.35.1", features = ["rt"]}
 vecmap-rs = "0.1.13"
 
 [features]
-default = ["switchyard"]
+default = ["switchyard", "resample-soxr"]
+# Uses libsoxr for resampling. libsoxr gives good performance and high quality,
+# but is LGPL-licensed, which may be a problem for some applications.
+resample-soxr = ["dep:libsoxr"]
 # Exposes an implementation of TaskRuntime for Switchyard, and the convenient
 # Engine::new() function that uses Switchyard behind the scenes. Use this
 # unless you KNOW you don't want it.
