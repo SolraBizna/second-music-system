@@ -239,7 +239,7 @@ impl Timebase {
                 // Parse the rest of the specifier as a f32
                 match specifier.parse::<PosFloat>() {
                     Ok(x) => x,
-                    Err(_) => return Err(format!("Invalid timecode")),
+                    Err(_) => return Err("Invalid timecode".to_string()),
                 }
             } else {
                 // Parse up to the next `.` as an i32
@@ -250,7 +250,7 @@ impl Timebase {
                     &specifier[(period_pos + 1).min(specifier.len())..];
                 match interesting.parse::<i32>() {
                     Ok(x) => PosFloat::new(x as f32)?,
-                    Err(_) => return Err(format!("Invalid timecode")),
+                    Err(_) => return Err("Invalid timecode".to_string()),
                 }
             };
             if be_one_based && stage.one_based {

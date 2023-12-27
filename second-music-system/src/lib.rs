@@ -1,5 +1,3 @@
-#![allow(clippy::useless_format)] // DELETEME
-
 use std::{
     cmp::{Ordering, PartialOrd},
     collections::HashMap,

@@ -408,17 +408,17 @@ fn parse_flow_command_tokens(
             }
             Some("starting") => {
                 if tokens.get(0).map(String::as_str) != Some("restart") {
-                    return Err(format!(
-                        "next element after \"restart\" must be \"node\" or \"starting\""
-                    ));
+                    return Err(
+                        "next element after \"restart\" must be \"node\" or \"starting\"".to_string()
+                    );
                 }
                 if tokens.get(2).map(String::as_str) != Some("node") {
-                    return Err(format!("next element after \"starting\" must be \"node\""));
+                    return Err("next element after \"starting\" must be \"node\"".to_string());
                 }
                 if tokens.len() != 3 {
-                    return Err(format!(
+                    return Err(
                         "nothing is allowed after \"restart starting node\""
-                    ));
+                        .to_string());
                 }
                 Ok(Some(Command::RestartFlow))
             }

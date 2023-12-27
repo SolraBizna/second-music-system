@@ -364,15 +364,14 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for StreamMan<Runtime> {
         }
     }
     fn unload(&mut self, sound: &str, start: PosFloat) -> bool {
-        let individual_sound = if let Some(individual_sound) =
-            self.sounds.get_mut(sound)
-        {
-            individual_sound
-        } else {
-            self.delegate
-                .warning(&format!("SMS bug: unloaded something not loaded"));
-            return true;
-        };
+        let individual_sound =
+            if let Some(individual_sound) = self.sounds.get_mut(sound) {
+                individual_sound
+            } else {
+                self.delegate
+                    .warning("SMS bug: unloaded something not loaded");
+                return true;
+            };
         match individual_sound.カンバン.entry(start) {
             VecMapEntry::Occupied(mut ent) => {
                 ent.get_mut().loads -= 1;
@@ -386,9 +385,8 @@ impl<Runtime: TaskRuntime> SoundManSubtype<Runtime> for StreamMan<Runtime> {
                 }
             }
             VecMapEntry::Vacant(_) => {
-                self.delegate.warning(&format!(
-                    "SMS bug: unloaded something not loaded"
-                ));
+                self.delegate
+                    .warning("SMS bug: unloaded something not loaded");
                 true
             }
         }
