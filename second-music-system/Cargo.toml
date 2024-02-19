@@ -26,7 +26,7 @@ derivative = "2.2"
 futures = "0.3.29"
 # We can use this library to resample sounds, if there isn't a conflict with
 # LGPL.
-libsoxr = {optional=true, version="0.2.9"}
+libsoxr = {optional=true, git = "https://github.com/nemored/libsoxr-rs", branch = "feature/env-var"}
 # If the "switchyard" feature is enabled, we use this crate to decide how many
 # threads we should spawn for background loading (if the caller didn't request
 # a specific number).
