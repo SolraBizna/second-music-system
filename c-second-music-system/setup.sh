@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 print_usage() {
     cat <<EOF
 
-Usage: ./install.sh [--prefix </path/to/install>] [--target <target-triple>] [--nightly] [--build] [--install] [--debug]
+Usage: ./setup.sh [--prefix </path/to/install>] [--target <target-triple>] [--nightly] [--build] [--install] [--debug]
 
  --prefix: Change where the library is installed. The library will be installed
            in "\${prefix}/lib" and the headers in "\${prefix}/include".
@@ -40,7 +40,7 @@ while [ $# -gt 0 ]; do
             ;;
         --prefix)
             prefix="$2"
-            if [ -n "$prefix" ]; then
+            if [ -z "$prefix" ]; then
                 echo "You must specify an installation path after --prefix"
                 print_usage
                 exit 1
@@ -49,7 +49,7 @@ while [ $# -gt 0 ]; do
             ;;
         --target)
             target="$2"
-            if [ -n "$target" ]; then
+            if [ -z "$target" ]; then
                 echo "You must specify an host triple after --target"
                 print_usage
                 exit 1
