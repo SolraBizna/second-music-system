@@ -17,7 +17,7 @@ runs:
 
     - name: Install nightly toolchain
       shell: bash
-      run: rustup toolchain install nightly-${{ inputs.arch }}-apple-darwin
+      run: rustup toolchain install nightly-${{ inputs.arch }}-apple-darwin --component rust-src
 
     - name: Build
       shell: bash
