@@ -1,0 +1,26 @@
+name: mac
+description: template used to build for mac
+
+inputs:
+  arch:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: brew install libsoxr pkg-config
+
+    - name: Build
+      run: ./build.sh --nightly --build
+      working-directory: ./c-second-music-system
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: sms-mac-${{ input.arch }}-release
+        if-no-files-found: error
+        path: ./target/${{ input.arch }}-apple-darwin/release/libc_second_music_system.a
