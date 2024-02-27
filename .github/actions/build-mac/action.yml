@@ -12,15 +12,17 @@ runs:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
+      shell: bash
       run: brew install libsoxr pkg-config
 
     - name: Build
+      shell: bash
       run: ./build.sh --nightly --build
       working-directory: ./c-second-music-system
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: sms-mac-${{ input.arch }}-release
+        name: sms-mac-${{ inputs.arch }}-release
         if-no-files-found: error
-        path: ./target/${{ input.arch }}-apple-darwin/release/libc_second_music_system.a
+        path: ./target/${{ inputs.arch }}-apple-darwin/release/libc_second_music_system.a
