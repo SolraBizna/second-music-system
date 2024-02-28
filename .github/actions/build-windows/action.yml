@@ -11,8 +11,6 @@ inputs:
 
 runs:
   using: "composite"
-  env:
-    rust-triplet: ${{ inputs.rust-arch }}-pc-windows-msvc
   steps:
     - uses: actions/checkout@v4
 
@@ -61,6 +59,10 @@ runs:
           ${{ env.cache-name }}-${{ runner.os }}-${{ inputs.arch }}-
           ${{ env.cache-name }}-${{ runner.os }}-
           ${{ env.cache-name }}-          
+
+    - name: Set platform triplet
+      shell: pwsh
+      run: echo rust-triplet=${{ inputs.rust-arch }}-pc-windows-msvc
 
     - name: Build
       shell: pwsh
