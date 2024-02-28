@@ -67,7 +67,7 @@ runs:
     - name: Build
       shell: pwsh
       run: |
-        $Env:SOXR_LINK_SEARCH = .\vcpkg_installed\${{ inputs.arch }}-windows\lib
+        $Env:SOXR_LINK_SEARCH = '.\vcpkg_installed\${{ inputs.arch }}-windows\lib'
         cargo +nightly-${{ env.rust-triplet }} -Z build-std=std,panic_abort build --release --target=${{ env.rust-triplet }}
 
     - name: Upload
