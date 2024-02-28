@@ -1,4 +1,4 @@
-name: release-mac
+name: release
 
 on:
   push:
@@ -25,3 +25,13 @@ jobs:
         uses: ./.github/actions/build-mac
         with:
           arch: x86_64
+
+  windows-x64-release:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build-windows
+        with:
+          arch: x64
+          rust_arch: x86_64
