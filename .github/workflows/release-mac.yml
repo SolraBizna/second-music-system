@@ -1,6 +1,11 @@
 name: release-mac
 
-on: [workflow_dispatch, workflow_call]
+on:
+  push:
+    branches:
+      - ghactions
+  workflow_dispatch:
+  workflow_call:
 
 jobs:
   mac-x86_64-release:
