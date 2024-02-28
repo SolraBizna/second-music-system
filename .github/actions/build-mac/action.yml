@@ -32,7 +32,7 @@ runs:
           ${{ env.CARGO_HOME }}/registry/index
           ${{ env.CARGO_HOME }}/registry/cache
           ${{ env.CARGO_HOME }}/git/db
-        key: ${ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-build-${{ env.cache-name }}-
           ${{ runner.os }}-build-
