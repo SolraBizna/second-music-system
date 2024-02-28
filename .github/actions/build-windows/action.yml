@@ -62,7 +62,7 @@ runs:
 
     - name: Set platform triplet
       shell: pwsh
-      run: echo rust-triplet=${{ inputs.rust-arch }}-pc-windows-msvc
+      run: echo rust-triplet=${{ inputs.rust-arch }}-pc-windows-msvc >> $Env:GITHUB_ENV
 
     - name: Build
       shell: pwsh
