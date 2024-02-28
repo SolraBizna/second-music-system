@@ -18,7 +18,7 @@ runs:
       shell: pwsh
       run: |
         $vcpkg_commit_id = git -C ${Env:VCPKG_INSTALLATION_ROOT} rev-parse --short HEAD
-        echo vcpkg-current-hash=$vcpkg_commit_id >> $env:GITHUB_ENV
+        echo vcpkg-current-hash=$vcpkg_commit_id >> $Env:GITHUB_ENV
 
     - name: Cache Vcpkg packages
       uses: actions/cache@v4
