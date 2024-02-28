@@ -100,6 +100,7 @@ find_target() {
     if hash rustup 2>/dev/null; then
         target="$(rustup show 2>/dev/null | awk '/^Default host: .*$/ { sub("Default host: ",""); print }')"
         echo "Detected target: $target"
+        mkdir -p ../target
         echo "$target" > ../target/.detected-target
     elif [ -f ../target/.detected-target ]; then
         # we stashed this in case of "build && sudo install"
