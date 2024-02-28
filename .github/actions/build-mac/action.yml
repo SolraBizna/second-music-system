@@ -20,7 +20,7 @@ runs:
       run: rustup toolchain install nightly-${{ inputs.arch }}-apple-darwin --component rust-src
 
     - name: Cache rust dependencies
-      use: actions/cache@v4
+      uses: actions/cache@v4
       env:
         CARGO_HOME: ${{ env.HOME }}/.cargo
         cache-name: cache-rust-dependencies
@@ -32,7 +32,7 @@ runs:
           ${{ env.CARGO_HOME }}/registry/index
           ${{ env.CARGO_HOME }}/registry/cache
           ${{ env.CARGO_HOME }}/git/db
-        key: $${ runner.os }}-build-${{ env.cache-name }}-${{ hashFile('**/Cargo.lock') }}
+        key: $${ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-build-${{ env.cache-name }}-
           ${{ runner.os }}-build-
