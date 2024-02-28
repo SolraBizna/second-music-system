@@ -9,11 +9,10 @@ inputs:
     required: true
     type: string
 
-env:
-  rust-triplet: ${{ inputs.rust-arch }}-pc-windows-msvc
-
 runs:
   using: "composite"
+  env:
+    rust-triplet: ${{ inputs.rust-arch }}-pc-windows-msvc
   steps:
     - uses: actions/checkout@v4
 
