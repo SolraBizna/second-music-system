@@ -34,4 +34,4 @@ jobs:
         uses: ./.github/actions/build-windows
         with:
           arch: x64
-          rust_arch: x86_64
+          rust-arch: x86_64
