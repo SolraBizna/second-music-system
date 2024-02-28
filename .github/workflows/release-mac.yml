@@ -8,6 +8,15 @@ on:
   workflow_call:
 
 jobs:
+  mac-aarch64-release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build-mac
+        with:
+          arch: aarch64
+                    
   mac-x86_64-release:
     runs-on: macos-13
     steps:
@@ -16,4 +25,3 @@ jobs:
         uses: ./.github/actions/build-mac
         with:
           arch: x86_64
-                    
