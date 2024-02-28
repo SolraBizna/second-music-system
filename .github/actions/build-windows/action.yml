@@ -38,7 +38,7 @@ runs:
 
     - name: Install nightly toolchain
       shell: pwsh
-      run: rustup toolchain install nightly-${{ inputs.arch }}-pc-windows-msvc --component rust-src
+      run: rustup toolchain install nightly-${{ inputs.rust-arch }}-pc-windows-msvc --component rust-src
 
     - name: Cache rust dependencies
       uses: actions/cache@v4
