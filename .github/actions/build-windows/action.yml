@@ -34,7 +34,7 @@ runs:
       shell: pwsh
       run: |
         $vcpkg_path = (Join-Path ${Env:VCPKG_INSTALLATION_ROOT} vcpkg.exe)
-        &$vcpkg_path install
+        &$vcpkg_path --triplet ${{ inputs.arch }}-windows install
 
     - name: Install nightly toolchain
       shell: pwsh
