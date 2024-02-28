@@ -75,4 +75,4 @@ runs:
       with:
         name: sms-windows-${{ inputs.arch }}-release
         if-no-files-found: error
-        path: ./target/${{ env.rust-triplet }}/release/libc_second_music_system.lib
+        path: ./target/${{ env.rust-triplet }}/release/c_second_music_system.lib
