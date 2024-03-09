@@ -8,15 +8,16 @@ on:
   workflow_call:
 
 jobs:
-  mac-aarch64-release:
+  mac-arm64e-release:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: Build
         uses: ./.github/actions/build-mac
         with:
-          arch: aarch64
-                    
+          rust-arch: aarch64
+          lipo-arch: arm64e
+
   mac-x86_64-release:
     runs-on: macos-13
     steps:
@@ -24,7 +25,17 @@ jobs:
       - name: Build
         uses: ./.github/actions/build-mac
         with:
-          arch: x86_64
+          rust-arch: x86_64
+          lipo-arch: x86_64
+
+  mac-arm64e+x86_64-release:
+    runs-on: macos-13
+    needs:
+      - mac-arm64e-release
+      - mac-x86_64-release
+    steps:
+      - name: Lipo
+        uses: ./.github/actions/lipo-mac-arm64e+x86_64
 
   windows-x64-release:
     runs-on: windows-2022
@@ -33,5 +44,5 @@ jobs:
       - name: Build
         uses: ./.github/actions/build-windows
         with:
-          arch: x64
           rust-arch: x86_64
+          ms-arch: x64

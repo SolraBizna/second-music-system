@@ -2,7 +2,7 @@ name: mac
 description: template used to build for mac
 
 inputs:
-  arch:
+  rust-arch:
     required: true
     type: string
 
@@ -17,7 +17,7 @@ runs:
 
     - name: Install nightly toolchain
       shell: bash
-      run: rustup toolchain install nightly-${{ inputs.arch }}-apple-darwin --component rust-src
+      run: rustup toolchain install nightly-${{ inputs.rust-arch }}-apple-darwin --component rust-src
 
     - name: Cache rust dependencies
       uses: actions/cache@v4
@@ -32,11 +32,11 @@ runs:
           ${{ env.CARGO_HOME }}/registry/index
           ${{ env.CARGO_HOME }}/registry/cache
           ${{ env.CARGO_HOME }}/git/db
-        key: ${{ runner.os }}-${{ inputs.arch }}-build-${{ env.cache-name }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ inputs.rust-arch }}-build-${{ env.cache-name }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-${{ inputs.arch }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-${{ inputs.arch }}-build-
-          ${{ runner.os }}-${{ inputs.arch }}-
+          ${{ runner.os }}-${{ inputs.rust-arch }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-${{ inputs.rust-arch }}-build-
+          ${{ runner.os }}-${{ inputs.rust-arch }}-
 
     - name: Build
       shell: bash
@@ -46,6 +46,6 @@ runs:
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: sms-mac-${{ inputs.arch }}-release
+        name: csms-mac-${{ inputs.lipo-arch }}-release
         if-no-files-found: error
-        path: ./target/${{ inputs.arch }}-apple-darwin/release/libc_second_music_system.a
+        path: ./target/${{ inputs.rust-arch }}-apple-darwin/release/libc_second_music_system.a
