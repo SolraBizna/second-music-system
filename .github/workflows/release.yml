@@ -28,7 +28,7 @@ jobs:
           rust-arch: x86_64
           lipo-arch: x86_64
 
-  mac-arm64e+x86_64-release:
+  mac-arm64e-x86_64-release:
     runs-on: macos-13
     needs:
       - mac-arm64e-release
