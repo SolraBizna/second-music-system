@@ -2,6 +2,9 @@ name: mac
 description: template used to build for mac
 
 inputs:
+  lipo-arch:
+    required: true
+    type: string
   rust-arch:
     required: true
     type: string

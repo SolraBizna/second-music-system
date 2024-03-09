@@ -21,11 +21,11 @@ runs:
 
     - name: Lipo the binaries
       shell: bash
-      run: lipo -create -output mac-arm64e+x86_64/libc_second_music_system.a {arm64e,x86_64}/libc_second_music_system.a
+      run: lipo -create -output libc_second_music_system.a {arm64e,x86_64}/libc_second_music_system.a
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
         name: csms-mac-arm64e+x86_64-release
         if-no-files-found: error
-        path: mac-arm64e+x86_64/libc_second_music_system.a
+        path: libc_second_music_system.a
