@@ -73,7 +73,7 @@ jobs:
           cp README.md update.lua ..
           (git fetch --depth 1 "${GITHUB_REF_NAME}" && git checkout "${GITHUB_REF_NAME}") || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}")
           mv ../README.md ../update.lua .
-          GITHUB_TOKEN="${CSMS_BINARIES_GITHUB_TOKEN}" lua5.4 ./update.lua https://github.com/${GITHUB_REPOSITORY}/actions/run/${GITHUB_RUN_ID}
+          GITHUB_TOKEN="${CSMS_BINARIES_GITHUB_TOKEN}" lua5.3 ./update.lua https://github.com/${GITHUB_REPOSITORY}/actions/run/${GITHUB_RUN_ID}
           git add .
           git commit -m "Automatic update for commit $(cat SOURCE_COMMIT)"
           git push origin "${GITHUB_REF_NAME}:${GITHUB_REF_NAME}" || (echo "If you want the csms-binary-push action to work, you need to fork the csms-binaries repository and put an appropriate token in the CSMS_BINARIES_GITHUB_TOKEN secret. See https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions"; false)
