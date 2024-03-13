@@ -47,3 +47,28 @@ jobs:
         with:
           rust-arch: x86_64
           ms-arch: x64
+
+  csms-binary-push:
+    runs-on: ubuntu-22.04
+    needs:
+      - mac-arm64e-release
+      - mac-arm64e-x86_64-release
+      - mac-x86_64-release
+      - windows-x64-release
+    steps:
+      - name: Update a matching binaries repo
+        shell: bash
+        env:
+          CSMS_BINARIES_GITHUB_TOKEN: ${{ secrets.CSMS_BINARIES_GITHUB_TOKEN }}
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "<>"
+          git clone --depth 1 -b main https://token:"${CSMS_BINARIES_GITHUB_TOKEN}"@github.com/"${GITHUB_REPOSITORY_OWNER}"/csms-binaries || (echo "If you want the csms-binary-push action to work, you need to fork the csms-binaries repository and put an appropriate token in the CSMS_BINARIES_GITHUB_TOKEN secret. See https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions"; false)
+          cd csms-binaries
+          cp README.md update.lua ..
+          (git fetch --depth 1 "${GITHUB_REF_NAME}" && git checkout "${GITHUB_REF_NAME}") || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}")
+          mv ../README.md ../update.lua .
+          GITHUB_TOKEN="${CSMS_BINARIES_GITHUB_TOKEN}" lua5.4 ./update.lua https://github.com/${GITHUB_REPOSITORY}/actions/run/${GITHUB_RUN_ID}
+          git add .
+          git commit -m "Automatic update for commit $(cat SOURCE_COMMIT)"
+          git push origin "${GITHUB_REF_NAME}:${GITHUB_REF_NAME}" || (echo "If you want the csms-binary-push action to work, you need to fork the csms-binaries repository and put an appropriate token in the CSMS_BINARIES_GITHUB_TOKEN secret. See https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions"; false)
