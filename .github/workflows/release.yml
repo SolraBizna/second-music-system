@@ -61,7 +61,7 @@ jobs:
         env:
           CSMS_BINARIES_GITHUB_TOKEN: ${{ secrets.CSMS_BINARIES_GITHUB_TOKEN }}
         run: |
-          sudo apt-get install lua5.4 liblua5.4-dev luarocks
+          sudo apt-get install lua5.3 liblua5.3-dev luarocks
           sudo luarocks install lua-cjson2
           sudo luarocks install luafilesystem
           sudo luarocks install http
