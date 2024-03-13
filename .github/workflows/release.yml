@@ -61,6 +61,11 @@ jobs:
         env:
           CSMS_BINARIES_GITHUB_TOKEN: ${{ secrets.CSMS_BINARIES_GITHUB_TOKEN }}
         run: |
+          sudo apt-get install lua5.4 liblua5.4-dev luarocks
+          sudo luarocks install lua-cjson2
+          sudo luarocks install luafilesystem
+          sudo luarocks install http
+          sudo luarocks install base64
           git clone --depth 1 -b main https://token:"${CSMS_BINARIES_GITHUB_TOKEN}"@github.com/"${GITHUB_REPOSITORY_OWNER}"/csms-binaries || (echo "If you want the csms-binary-push action to work, you need to fork the csms-binaries repository and put an appropriate token in the CSMS_BINARIES_GITHUB_TOKEN secret. See https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions"; false)
           cd csms-binaries
           git config user.name "GitHub Actions"
