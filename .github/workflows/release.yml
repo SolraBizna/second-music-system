@@ -71,7 +71,7 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "<>"
           cp README.md update.lua ..
-          (git fetch "${GITHUB_REF_NAME}" && git checkout "${GITHUB_REF_NAME}") || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}")
+          (git fetch origin "${GITHUB_REF_NAME}" && git checkout "${GITHUB_REF_NAME}") || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}")
           mv ../README.md ../update.lua .
           GITHUB_TOKEN="${CSMS_BINARIES_GITHUB_TOKEN}" lua5.3 ./update.lua https://github.com/${GITHUB_REPOSITORY}/actions/run/${GITHUB_RUN_ID}
           git add .
