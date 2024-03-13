@@ -66,12 +66,12 @@ jobs:
           sudo luarocks install luafilesystem
           sudo luarocks install http
           sudo luarocks install base64
-          git clone --depth 1 -b main https://token:"${CSMS_BINARIES_GITHUB_TOKEN}"@github.com/"${GITHUB_REPOSITORY_OWNER}"/csms-binaries || (echo "If you want the csms-binary-push action to work, you need to fork the csms-binaries repository and put an appropriate token in the CSMS_BINARIES_GITHUB_TOKEN secret. See https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions"; false)
+          git clone -b main https://token:"${CSMS_BINARIES_GITHUB_TOKEN}"@github.com/"${GITHUB_REPOSITORY_OWNER}"/csms-binaries || (echo "If you want the csms-binary-push action to work, you need to fork the csms-binaries repository and put an appropriate token in the CSMS_BINARIES_GITHUB_TOKEN secret. See https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions"; false)
           cd csms-binaries
           git config user.name "GitHub Actions"
           git config user.email "<>"
           cp README.md update.lua ..
-          (git fetch origin "${GITHUB_REF_NAME}" && git checkout "${GITHUB_REF_NAME}") || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}")
+          if [ "${GITHUB_REF_NAME}" != main ]; then git checkout "${GITHUB_REF_NAME}" || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}"); fi
           mv ../README.md ../update.lua .
           GITHUB_TOKEN="${CSMS_BINARIES_GITHUB_TOKEN}" lua5.3 ./update.lua https://github.com/${GITHUB_REPOSITORY}/actions/run/${GITHUB_RUN_ID}
           git add .
