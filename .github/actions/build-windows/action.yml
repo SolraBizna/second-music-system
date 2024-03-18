@@ -2,7 +2,7 @@ name: windows
 description: template used to build for windows
 
 inputs:
-  arch:
+  ms-arch:
     required: true
     type: string
   rust-arch:
@@ -23,18 +23,18 @@ runs:
     - name: Cache Vcpkg packages
       uses: actions/cache@v4
       with:
-        path: ./vcpkg_installed/${{ inputs.arch }}-windows
-        key: ${{ runner.os }}-${{ inputs.arch }}-vcpkg-${{ env.vcpkg-current-hash }}-${{ hashFiles('**/vcpkg.json') }}
+        path: ./vcpkg_installed/${{ inputs.ms-arch }}-windows
+        key: ${{ runner.os }}-${{ inputs.ms-arch }}-vcpkg-${{ env.vcpkg-current-hash }}-${{ hashFiles('**/vcpkg.json') }}
         restore-keys: |
-          ${{ runner.os }}-${{ inputs.arch }}-vcpkg-${{ env.vcpkg-current-hash }}-
-          ${{ runner.os }}-${{ inputs.arch }}-vcpkg-
-          ${{ runner.os }}-${{ inputs.arch }}-
+          ${{ runner.os }}-${{ inputs.ms-arch }}-vcpkg-${{ env.vcpkg-current-hash }}-
+          ${{ runner.os }}-${{ inputs.ms-arch }}-vcpkg-
+          ${{ runner.os }}-${{ inputs.ms-arch }}-
 
     - name: Install dependencies
       shell: pwsh
       run: |
         $vcpkg_path = (Join-Path ${Env:VCPKG_INSTALLATION_ROOT} vcpkg.exe)
-        &$vcpkg_path --triplet ${{ inputs.arch }}-windows install
+        &$vcpkg_path --triplet ${{ inputs.ms-arch }}-windows install
 
     - name: Install nightly toolchain
       shell: pwsh
@@ -53,12 +53,12 @@ runs:
           ${{ env.CARGO_HOME }}/registry/index
           ${{ env.CARGO_HOME }}/registry/cache
           ${{ env.CARGO_HOME }}/git/db
-        key: ${{ env.cache-name }}-${{ runner.os }}-${{ inputs.arch }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ env.cache-name }}-${{ runner.os }}-${{ inputs.ms-arch }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ env.cache-name }}-${{ runner.os }}-${{ inputs.arch }}-build-
-          ${{ env.cache-name }}-${{ runner.os }}-${{ inputs.arch }}-
+          ${{ env.cache-name }}-${{ runner.os }}-${{ inputs.ms-arch }}-build-
+          ${{ env.cache-name }}-${{ runner.os }}-${{ inputs.ms-arch }}-
           ${{ env.cache-name }}-${{ runner.os }}-
-          ${{ env.cache-name }}-          
+          ${{ env.cache-name }}-
 
     - name: Set platform triplet
       shell: pwsh
@@ -67,12 +67,12 @@ runs:
     - name: Build
       shell: pwsh
       run: |
-        $Env:SOXR_LINK_SEARCH = '.\vcpkg_installed\${{ inputs.arch }}-windows\lib'
+        $Env:SOXR_LINK_SEARCH = '.\vcpkg_installed\${{ inputs.ms-arch }}-windows\lib'
         cargo +nightly-${{ env.rust-triplet }} -Z build-std=std,panic_abort build --release --target=${{ env.rust-triplet }}
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
-        name: sms-windows-${{ inputs.arch }}-release
+        name: csms-windows-${{ inputs.ms-arch }}-release
         if-no-files-found: error
         path: ./target/${{ env.rust-triplet }}/release/c_second_music_system.lib

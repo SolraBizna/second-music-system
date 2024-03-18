@@ -1,0 +1,31 @@
+name: lipo-mac
+description: create a universal Mac binary from the non-universal Apple Silicon and x86_64 binaries
+
+inputs:
+  lipo-arches:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: csms-mac-arm64e-release
+        path: arm64e
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: csms-mac-x86_64-release
+        path: x86_64
+
+    - name: Lipo the binaries
+      shell: bash
+      run: lipo -create -output libc_second_music_system.a {arm64e,x86_64}/libc_second_music_system.a
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        name: csms-mac-arm64e+x86_64-release
+        if-no-files-found: error
+        path: libc_second_music_system.a
