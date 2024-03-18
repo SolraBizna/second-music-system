@@ -90,3 +90,11 @@ Second Music System is copyright 2022 and 2023 Solra Bizna and Noah Obert. It is
 at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the Second Music System crate by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+By default, Second Music System makes use of libsoxr, the Sox resampling library. libsoxr is licensed under the Lesser GPL 2.1 (or later), which makes it slightly more restrictive than Second Music System itself. In particular, Second Music System may always be linked statically, whereas linking libsoxr statically requires that the overall license situation is LGPL-compatible. If you use Second Music System in non-LGPL-compatible software, you must either:
+
+- Make sure that libsoxr is not being statically linked:
+  - Windows: You will probably link dynamically to `soxr.dll` by default. You simply need to put that file into the same folder as your `.exe`.
+  - MacOS: You will probably link dynamically to `libsoxr.dylib` by default. To make your application work on other Macs, you need to put that file into your `.app` bundle and make liberal application of `install_name_tool`.
+  - Linux: It's overwhelmingly likely that you will either be linking dynamically to the system's `libsoxr.so` or bundling a copy yourself. Either way, you'll be in good shape.
+- **OR**: Disable the `resample-soxr` feature flag, and master all of your music at the correct sample rate in the first place.
