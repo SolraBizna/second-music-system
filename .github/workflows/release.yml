@@ -48,12 +48,23 @@ jobs:
           rust-arch: x86_64
           ms-arch: x64
 
+  windows-x86-release:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build-windows
+        with:
+          rust-arch: x86
+          ms-arch: x86
+
   csms-binary-push:
     runs-on: ubuntu-22.04
     needs:
       - mac-arm64e-release
       - mac-arm64e-x86_64-release
       - mac-x86_64-release
+      - windows-x86-release
       - windows-x64-release
     steps:
       - name: Update a matching binaries repo
