@@ -54,7 +54,7 @@ jobs:
       - name: Build
         uses: ./.github/actions/build-windows
         with:
-          rust-arch: x86
+          rust-arch: i686
           ms-arch: x86
 
   csms-binary-push:
