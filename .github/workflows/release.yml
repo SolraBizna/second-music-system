@@ -81,7 +81,19 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "<>"
           cp README.md update.lua ..
-          if [ "${GITHUB_REF_NAME}" != main ]; then git checkout "${GITHUB_REF_NAME}" || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}"); fi
+          case ${GITHUB_REF_TYPE} in
+            branch)
+              if [ "${GITHUB_REF_NAME}" != main ]; then
+                  git checkout "${GITHUB_REF_NAME}" || (git branch "${GITHUB_REF_NAME}" && git switch "${GITHUB_REF_NAME}")
+              fi
+              ;;
+            tag)
+              git tag -a "${GITHUB_REF_NAME}" -m "Auto-generated tag"
+              ;;
+            *)
+              echo "Unknown GITHUB_REF_TYPE \"${GITHUB_REF_TYPE}\""
+              exit 1
+          esac
           mv ../README.md ../update.lua .
           GITHUB_TOKEN="${CSMS_BINARIES_GITHUB_TOKEN}" lua5.3 ./update.lua https://github.com/${GITHUB_REPOSITORY}/actions/run/${GITHUB_RUN_ID}
           git add .
