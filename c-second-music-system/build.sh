@@ -86,7 +86,8 @@ if [ -z "$build" -a -z "$install" ]; then
 fi
 
 if [ -n "$build" ]; then
-    if ! hash cargo 2>/dev/null || ! hash rustup 2>/dev/null; then
+    if ! hash cargo 2>/dev/null || \
+    (test -z "$target" && ! hash rustup) 2>/dev/null; then
         echo "Please install a Rust environment, or, if it's already installed,"
         echo "ensure that \"cargo\" and \"rustup\" are in your PATH."
         echo ""
