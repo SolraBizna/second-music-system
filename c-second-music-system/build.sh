@@ -20,6 +20,7 @@ Usage: ./build.sh [--prefix </path/to/install>] [--target <target-triple>] [--ni
 --install: Install the library.
   --debug: Build or install a debug version of the library, instead of a
            release version. The binary will be much larger and slower.
+--offline: Pass the --offline flag to cargo.
 
 (If neither of --build or --install is specified, both will be performed.)
 
@@ -31,6 +32,7 @@ target=
 nightly=
 build=
 install=
+offline=
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -70,6 +72,10 @@ while [ $# -gt 0 ]; do
             ;;
         --debug)
             debug=1
+            shift
+            ;;
+        --offline)
+            offline=1
             shift
             ;;
         *)
@@ -119,6 +125,10 @@ buildcmd=(cargo)
 if [ -n "$nightly" ]; then
     buildcmd+=(+nightly -Z build-std=std,panic_abort)
     find_target
+fi
+
+if [ -n "$offline" ]; then
+    buildcmd+=(--offline)
 fi
 
 buildcmd+=(build)
